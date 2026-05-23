@@ -857,11 +857,13 @@ function drawQuantizedLinear(pts, secSampleCount, secStartFrac, secWFrac, tlToPx
       plot(b.idx, a.val, false);
       plot(b.idx, b.val, false);
     } else {
-      // sub-sample the interpolation by pixel width (~1 sub-step per 2px)
+      // sub-sample by pixel diagonal length so vertical jumps also get smooth steps
       const xa = tlToPx(secStartFrac + (a.idx / Math.max(1, secSampleCount - 1)) * secWFrac);
       const xb = tlToPx(secStartFrac + (b.idx / Math.max(1, secSampleCount - 1)) * secWFrac);
       const pxSpan = Math.abs(xb - xa);
-      const steps = Math.max(2, Math.ceil(pxSpan / 2));
+      const vSpan = Math.abs(b.val - a.val) * ampH;
+      const segLen = Math.sqrt(pxSpan * pxSpan + vSpan * vSpan);
+      const steps = Math.max(8, Math.ceil(segLen / 2));
       for (let j = 1; j <= steps; j++) {
         let t = j / steps;
         if (state.connect === 'smooth') t = t * t * (3 - 2 * t);
@@ -962,7 +964,7 @@ function drawCircle(W, H, sectors, lines) {
     ctx.beginPath();
     let started = false;
 
-    // Approximate circumferential pixel cost per sector to choose sub-sample count
+    // Sector-arc pixel cost (circumferential)
     const circumPx = 2 * Math.PI * (baseR + variation);
     const pxPerSector = circumPx / N;
 
@@ -996,9 +998,13 @@ function drawCircle(W, H, sectors, lines) {
           plot(bFrac, a.val, false);
           plot(bFrac, b.val, false);
         } else {
-          // sub-step density based on pixel arc length
+          // Substep count = pixel diagonal length of segment, not just arc.
+          // arc-only undercounts when radius changes a lot (sharp spike).
           const arcPx = Math.abs(bFrac - aFrac) * pxPerSector;
-          const steps = Math.max(2, Math.ceil(arcPx / 2));
+          const radialPx = Math.abs(b.val - a.val) * variation;
+          const segLen = Math.sqrt(arcPx * arcPx + radialPx * radialPx);
+          // 2px per substep, minimum 8 to keep curves smooth at small scales
+          const steps = Math.max(8, Math.ceil(segLen / 2));
           for (let j = 1; j <= steps; j++) {
             let t = j / steps;
             if (state.connect === 'smooth') t = t * t * (3 - 2 * t);
