@@ -466,6 +466,13 @@
       <button data-val="sharp" class="active">シャープ</button>
     </div>
 
+    <h2>波形ソース</h2>
+    <div class="toggle" id="pitchModeToggle">
+      <button data-val="full" class="active">全体</button>
+      <button data-val="one-period">1周期</button>
+    </div>
+    <div class="hint">1周期：自己相関法で基本周期を推定し、中央付近の1サイクルをパターンとして使用</div>
+
     <div class="control" style="margin-top: 20px;">
       <label><span>最大振幅（mm）</span><span class="val" id="variationVal">2.00 mm</span></label>
       <input type="range" id="variation" min="0.1" max="5" step="0.05" value="2.0">
@@ -503,7 +510,8 @@
       <span class="raw">■ 生波形</span> &nbsp;
       <span class="vowel">■ 推定された母音区間（開始位置に縦線）</span> &nbsp;
       <span class="info">■ 振幅エンベロープ（参考）</span> &nbsp;
-      <span style="color:#ff9a3c;">■ 印鑑に反映される範囲（暗い領域は除外）</span>
+      <span style="color:#ff9a3c;">■ 印鑑に反映される範囲（暗い領域は除外）</span> &nbsp;
+      <span style="color:#ffc800;">■ 抽出された1周期（波形ソース=1周期 のとき表示）</span>
       <div style="margin-top:6px; color:#666;">
         子音/母音の判定はゼロクロス率と振幅の組合せによる簡易推定です（純母音文字は境界なし、有声子音は境界が曖昧になります）。
       </div>
@@ -538,6 +546,7 @@ const state = {
   logK: 5,              // log compression strength (used when spacing='log')
   lineCount: 5,
   norm: 'per-sector',   // 'per-sector' | 'global'
+  pitchMode: 'full',     // 'full' | 'one-period'
   // View / display
   view: 'circle',       // 'linear' | 'circle'
   show: { raw: true, quant: true, lines: false, zero: false, sectors: true },
@@ -801,6 +810,7 @@ setupToggle('snapModeToggle', 'snapMode');
 setupToggle('connectToggle', 'connect');
 setupToggle('spacingToggle', 'spacing');
 setupToggle('normToggle', 'norm');
+setupToggle('pitchModeToggle', 'pitchMode');
 
 function setupSlider(id, key, scale, suffix, valId) {
   const slider = document.getElementById(id);
@@ -883,7 +893,11 @@ function buildSectorOffsets() {
     const samples = slot.buffer.getChannelData(0);
     const tr = effectiveTrim(slot);
     if (!tr || tr.end <= tr.start) return null;
-    const trimmed = samples.slice(tr.start, tr.end);
+    let trimmed = samples.slice(tr.start, tr.end);
+    if (state.pitchMode === 'one-period') {
+      const period = extractOnePeriod(trimmed, slot.buffer.sampleRate);
+      if (period) trimmed = period;
+    }
     const r = resample(trimmed, sectorRes);
     if (state.boundary === 'fade') applyFade(r, 0, r.length, state.fadePct);
     return r;
@@ -1004,6 +1018,48 @@ function interpolateAt(idx, ptsOrSamples, isControlPoints) {
     return a.val * (1 - t) + b.val * t;
   }
   return ptsOrSamples[Math.max(0, Math.min(ptsOrSamples.length - 1, Math.round(idx)))];
+}
+
+// ============================================================
+// Autocorrelation-based pitch period extraction
+// ============================================================
+// Returns {start, end} sample indices within `samples`, or null if no clear pitch.
+function findOnePeriodRange(samples, sampleRate) {
+  const minLag = Math.floor(sampleRate / 500); // 500Hz upper bound
+  const maxLag = Math.floor(sampleRate / 70);  // 70Hz lower bound
+
+  const start = Math.floor(samples.length * 0.25);
+  const winLen = Math.floor(samples.length * 0.5);
+  if (winLen < maxLag * 2 || winLen < 4) return null;
+
+  let r0 = 0;
+  for (let i = start; i < start + winLen; i++) r0 += samples[i] * samples[i];
+  if (r0 === 0) return null;
+
+  let bestLag = -1;
+  let bestCorr = 0.3;
+  for (let lag = minLag; lag <= maxLag && start + lag + winLen <= samples.length; lag++) {
+    let r = 0;
+    for (let i = start; i < start + winLen; i++) r += samples[i] * samples[i + lag];
+    const norm = r / r0;
+    if (norm > bestCorr) { bestCorr = norm; bestLag = lag; }
+  }
+  if (bestLag < 0) return null;
+
+  const center = Math.floor(samples.length / 2);
+  let zc = center;
+  for (let i = center; i < center + bestLag * 2 && i + 1 < samples.length; i++) {
+    if (samples[i] <= 0 && samples[i + 1] > 0) { zc = i; break; }
+  }
+  if (zc + bestLag > samples.length) zc = Math.max(0, center - Math.floor(bestLag / 2));
+
+  return { start: zc, end: zc + bestLag };
+}
+
+function extractOnePeriod(samples, sampleRate) {
+  const range = findOnePeriodRange(samples, sampleRate);
+  if (!range) return null;
+  return samples.slice(range.start, range.end);
 }
 
 // RMS-based silence trimming: more robust than raw-amplitude threshold.
@@ -1717,6 +1773,8 @@ const view = {
   playheadIdx: -1,  // sample index of current playback position, -1 if not playing
   trimStart: 0,     // sample index where the trim region begins
   trimEnd: 0,       // sample index where the trim region ends (exclusive)
+  periodStart: -1,  // sample index of extracted period start (-1 if not available)
+  periodEnd: -1,    // sample index of extracted period end
   slotIndex: -1,    // currently displayed slot
 };
 
@@ -1846,6 +1904,18 @@ function openModal(slotIndex) {
   view.trimStart = trim.start;
   view.trimEnd = trim.end;
   view.slotIndex = slotIndex;
+
+  // Compute period range for 1周期 mode
+  view.periodStart = -1;
+  view.periodEnd = -1;
+  if (state.pitchMode === 'one-period') {
+    const trimmed = samples.slice(trim.start, trim.end);
+    const range = findOnePeriodRange(trimmed, sr);
+    if (range) {
+      view.periodStart = trim.start + range.start;
+      view.periodEnd = trim.start + range.end;
+    }
+  }
 
   modalChar.textContent = slot.char;
   const dur = (samples.length / sr * 1000).toFixed(0);
@@ -2266,6 +2336,31 @@ function drawLargeWaveform(lctx, W, H, samples, env, onsetIdx, zoom = 1, offset 
     }
   }
 
+  // 1周期 period overlay
+  if (view.periodStart >= 0 && view.periodEnd > view.periodStart) {
+    const pStartX = ((view.periodStart - startSampleF) / visibleSamples) * W;
+    const pEndX = ((view.periodEnd - startSampleF) / visibleSamples) * W;
+    if (pEndX > 0 && pStartX < W) {
+      const x0 = Math.max(0, pStartX), x1 = Math.min(W, pEndX);
+      lctx.fillStyle = 'rgba(255, 200, 0, 0.12)';
+      lctx.fillRect(x0, 0, x1 - x0, H);
+      lctx.strokeStyle = '#ffc800';
+      lctx.lineWidth = 1.5;
+      lctx.setLineDash([4, 3]);
+      for (const x of [pStartX, pEndX]) {
+        if (x >= 0 && x <= W) {
+          lctx.beginPath(); lctx.moveTo(x, 0); lctx.lineTo(x, H); lctx.stroke();
+        }
+      }
+      lctx.setLineDash([]);
+      lctx.fillStyle = '#ffc800';
+      lctx.font = '11px sans-serif';
+      lctx.textAlign = 'left';
+      const labelX = Math.max(0, pStartX) + 4;
+      if (labelX < W - 20) lctx.fillText('1周期', labelX, 32);
+    }
+  }
+
   // playhead line
   if (view.playheadIdx >= 0) {
     const xFrac = (view.playheadIdx - startSampleF) / visibleSamples;
@@ -2475,6 +2570,7 @@ function syncUIFromState() {
   setActive('spacingToggle', state.spacing);
   setActive('normToggle', state.norm);
   setActive('directionToggle', state.direction);
+  setActive('pitchModeToggle', state.pitchMode);
 
   // Sliders
   document.getElementById('variation').value = state.variationMm;
