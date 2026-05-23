@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>聲印 — 量子化プロトタイプ</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    background: #fafafa;
+    color: #222;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr 320px;
+    height: 100vh;
+  }
+  aside {
+    padding: 18px;
+    background: #fff;
+    border-right: 1px solid #e5e5e5;
+    overflow-y: auto;
+  }
+  aside.right { border-right: none; border-left: 1px solid #e5e5e5; }
+  main {
+    background: #fafafa;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  h1 { font-size: 15px; margin: 0 0 2px; font-weight: 600; }
+  .tag { font-size: 10px; color: #888; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 16px; }
+  h2 { font-size: 11px; margin: 16px 0 6px; color: #555; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+  input[type="text"] {
+    width: 100%;
+    padding: 7px 9px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .slots { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+  .slot {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px;
+    background: #f5f5f5;
+    border-radius: 3px;
+    border: 1px solid #e5e5e5;
+  }
+  .slot.recording { background: #fff1ee; border-color: #c8331c; }
+  .slot.has-data { background: #f0f7f0; border-color: #d0e5d0; }
+  .slot-char { font-size: 14px; font-weight: 600; width: 22px; text-align: center; }
+  .slot-btn {
+    flex: 1;
+    padding: 5px 6px;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 10px;
+    text-align: center;
+    user-select: none;
+  }
+  .slot-btn:hover { background: #f0f0f0; }
+  .slot.recording .slot-btn { background: #c8331c; color: white; border-color: #c8331c; }
+  .slot-clear { background: none; border: none; color: #888; cursor: pointer; font-size: 13px; padding: 2px 4px; }
+  .slot-clear:hover { color: #c8331c; }
+  .control { margin-bottom: 12px; }
+  .control label { display: block; font-size: 11px; color: #666; margin-bottom: 3px; }
+  .control .val { float: right; color: #c8331c; font-weight: 600; }
+  input[type="range"] { width: 100%; }
+  .toggle {
+    display: flex;
+    gap: 3px;
+    background: #f0f0f0;
+    padding: 2px;
+    border-radius: 4px;
+  }
+  .toggle button {
+    flex: 1;
+    background: none;
+    border: none;
+    padding: 5px 6px;
+    font-size: 10px;
+    cursor: pointer;
+    border-radius: 3px;
+    color: #555;
+    font-family: inherit;
+  }
+  .toggle button.active {
+    background: #fff;
+    color: #222;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    font-weight: 600;
+  }
+  .checks { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #444; margin-top: 4px; }
+  .checks label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .hint { font-size: 10px; color: #999; margin-top: 3px; line-height: 1.4; }
+
+  .top-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: #fff;
+    border-bottom: 1px solid #e5e5e5;
+    font-size: 12px;
+  }
+  .top-bar .spacer { flex: 1; }
+  .view-toggle {
+    display: flex;
+    background: #f0f0f0;
+    padding: 2px;
+    border-radius: 4px;
+  }
+  .view-toggle button {
+    background: none;
+    border: none;
+    padding: 5px 12px;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 11px;
+    color: #555;
+    font-family: inherit;
+  }
+  .view-toggle button.active {
+    background: #222;
+    color: #fff;
+    font-weight: 600;
+  }
+  .stage {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+  canvas.stage-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: #fff;
+  }
+  .status {
+    position: absolute;
+    bottom: 8px;
+    left: 16px;
+    font-size: 10px;
+    color: #999;
+  }
+  kbd {
+    display: inline-block;
+    background: #eee;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-family: inherit;
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <h1>聲印 量子化</h1>
+    <div class="tag">QUANTIZE PROTO</div>
+
+    <h2>名前</h2>
+    <input type="text" id="nameInput" maxlength="5" placeholder="ひらがな 1〜5文字">
+
+    <h2>録音</h2>
+    <div class="slots" id="slots"></div>
+    <div class="hint">押している間だけ録音（<kbd>1</kbd>〜<kbd>5</kbd> でも可）</div>
+
+    <h2>表示</h2>
+    <div class="checks">
+      <label><input type="checkbox" id="showRaw" checked> 生波形</label>
+      <label><input type="checkbox" id="showQuant" checked> 量子化後</label>
+      <label><input type="checkbox" id="showLines" checked> 基準線</label>
+      <label><input type="checkbox" id="showZero" checked> 0 ライン</label>
+      <label><input type="checkbox" id="showSectors" checked> セクタ境界</label>
+    </div>
+  </aside>
+
+  <main>
+    <div class="top-bar">
+      <div class="view-toggle" id="viewToggle">
+        <button data-val="linear" class="active">直線</button>
+        <button data-val="circle">円</button>
+      </div>
+      <span id="info" style="color:#666;"></span>
+      <span class="spacer"></span>
+      <span style="color:#888; font-size:10px;">基準線をクリックで強調 / Space=再生</span>
+    </div>
+    <div class="stage">
+      <canvas id="canvas" class="stage-canvas"></canvas>
+      <div class="status" id="status">名前を入力 → 録音</div>
+    </div>
+  </main>
+
+  <aside class="right">
+    <h2>量子化モード</h2>
+    <div class="toggle" id="snapModeToggle">
+      <button data-val="off">OFF</button>
+      <button data-val="A" class="active">A：山ごと</button>
+      <button data-val="B">B：方向転換ごと</button>
+    </div>
+    <div class="hint">A=0クロスで区切った山の最大値だけスナップ。B=極値ごとにスナップ。</div>
+
+    <h2>接続方法</h2>
+    <div class="toggle" id="connectToggle">
+      <button data-val="step" class="active">階段</button>
+      <button data-val="linear">線形</button>
+      <button data-val="smooth">滑らか</button>
+    </div>
+
+    <h2>基準線</h2>
+    <div class="toggle" id="spacingToggle">
+      <button data-val="equal" class="active">等間隔</button>
+      <button data-val="log">対数</button>
+    </div>
+
+    <div class="control" style="margin-top: 10px;">
+      <label><span>本数（片側）</span><span class="val" id="lineCountVal">5</span></label>
+      <input type="range" id="lineCount" min="1" max="20" value="5">
+    </div>
+
+    <div class="control">
+      <label><span>前処理スムージング</span><span class="val" id="preSmoothVal">0</span></label>
+      <input type="range" id="preSmooth" min="0" max="80" value="0">
+      <div class="hint">山認識前に波形を平滑化。値が大きいほど0クロスが減って山が大きくまとまる（=滑らかな量子化）</div>
+    </div>
+
+    <h2>その他</h2>
+    <div class="control">
+      <label><span>変動量（円表示用）</span><span class="val" id="variationVal">30%</span></label>
+      <input type="range" id="variation" min="0" max="100" value="30">
+    </div>
+
+    <div class="control">
+      <label><span>解像度（点数/円）</span><span class="val" id="resVal">512</span></label>
+      <input type="range" id="res" min="64" max="2048" step="64" value="512">
+    </div>
+
+    <h2 style="color: #888;">正規化</h2>
+    <div class="toggle" id="normToggle">
+      <button data-val="per-sector" class="active">文字ごと</button>
+      <button data-val="global">全体</button>
+    </div>
+    <div class="hint">「文字ごと」推奨：文字間の音量差をキャンセル。子音/母音内の差は残る。</div>
+  </aside>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+const state = {
+  name: '',
+  slots: [], // { char, buffer, recording, trimOverride }
+  snapMode: 'A',      // 'off' | 'A' | 'B'
+  connect: 'step',    // 'step' | 'linear' | 'smooth'
+  spacing: 'equal',   // 'equal' | 'log'
+  lineCount: 5,
+  variation: 0.30,
+  resolution: 512,
+  preSmooth: 0,       // # of moving-average passes applied BEFORE zero-crossing / extremum detection
+  outputDecim: 1,     // output point density: 1 = full resolution, 2 = half, ...
+  norm: 'per-sector', // 'per-sector' | 'global'
+  view: 'linear',     // 'linear' | 'circle'
+  show: { raw: true, quant: true, lines: true, zero: true, sectors: true },
+  highlightLine: null, // numeric value of basis line that was clicked
+  linZoom: 1,
+  linOffsetX: 0, // 0..1
+};
+
+let audioCtx = null;
+let persistentStream = null;
+let activeRecorder = null;
+let activeRecorderSlotIndex = -1;
+let activeRecorderChunks = [];
+
+// ============================================================
+// Recording (mirrors v2 with persistent stream)
+// ============================================================
+async function ensureAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
+}
+async function ensureStream() {
+  if (persistentStream && persistentStream.active) return persistentStream;
+  try {
+    persistentStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+    return persistentStream;
+  } catch (err) {
+    alert('マイクが取得できません: ' + err.message);
+    return null;
+  }
+}
+async function startRecording(i) {
+  if (activeRecorder) return;
+  await ensureAudioCtx();
+  const stream = await ensureStream();
+  if (!stream) return;
+  activeRecorderChunks = [];
+  activeRecorder = new MediaRecorder(stream);
+  activeRecorderSlotIndex = i;
+  activeRecorder.ondataavailable = e => activeRecorderChunks.push(e.data);
+  activeRecorder.onstop = async () => {
+    try {
+      if (!activeRecorderChunks.length) return;
+      const blob = new Blob(activeRecorderChunks, { type: activeRecorderChunks[0].type || 'audio/webm' });
+      const arrayBuf = await blob.arrayBuffer();
+      if (!arrayBuf.byteLength) return;
+      const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
+      state.slots[i].buffer = audioBuf;
+      state.slots[i].trimOverride = null;
+      renderSlots();
+      render();
+    } catch (err) { console.error(err); }
+    finally { activeRecorder = null; activeRecorderSlotIndex = -1; }
+  };
+  activeRecorder.start(50);
+  state.slots[i].recording = true;
+  renderSlots();
+}
+function stopRecording() {
+  if (!activeRecorder) return;
+  if (activeRecorderSlotIndex >= 0) state.slots[activeRecorderSlotIndex].recording = false;
+  try { activeRecorder.requestData(); } catch (e) {}
+  try { activeRecorder.stop(); } catch (e) {}
+}
+
+// ============================================================
+// Slots UI
+// ============================================================
+function renderSlots() {
+  const el = document.getElementById('slots');
+  el.innerHTML = '';
+  state.slots.forEach((slot, i) => {
+    const d = document.createElement('div');
+    d.className = 'slot';
+    if (slot.recording) d.classList.add('recording');
+    if (slot.buffer) d.classList.add('has-data');
+    const c = document.createElement('div');
+    c.className = 'slot-char';
+    c.textContent = slot.char;
+    d.appendChild(c);
+    const b = document.createElement('div');
+    b.className = 'slot-btn';
+    b.textContent = slot.buffer ? '再録音' : '押しっぱで録音';
+    const down = e => { e.preventDefault(); startRecording(i); };
+    const up = e => { e.preventDefault(); stopRecording(); };
+    b.addEventListener('mousedown', down);
+    b.addEventListener('mouseup', up);
+    b.addEventListener('mouseleave', () => { if (slot.recording) stopRecording(); });
+    b.addEventListener('touchstart', down, { passive: false });
+    b.addEventListener('touchend', up);
+    d.appendChild(b);
+    if (slot.buffer) {
+      const x = document.createElement('button');
+      x.className = 'slot-clear';
+      x.textContent = '×';
+      x.addEventListener('click', () => { slot.buffer = null; slot.trimOverride = null; renderSlots(); render(); });
+      d.appendChild(x);
+    }
+    el.appendChild(d);
+  });
+}
+
+const nameInput = document.getElementById('nameInput');
+nameInput.addEventListener('input', () => {
+  const v = nameInput.value.trim().slice(0, 5);
+  state.name = v;
+  const next = [];
+  for (let i = 0; i < v.length; i++) {
+    const ex = state.slots[i];
+    next.push({ char: v[i], buffer: ex && ex.char === v[i] ? ex.buffer : null, recording: false, trimOverride: null });
+  }
+  state.slots = next;
+  renderSlots();
+  render();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.target === nameInput) return;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    togglePlaybackAll();
+    return;
+  }
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= 5 && state.slots[n - 1] && !activeRecorder) {
+    e.preventDefault();
+    startRecording(n - 1);
+  }
+});
+document.addEventListener('keyup', e => {
+  if (e.target === nameInput) return;
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= 5 && activeRecorderSlotIndex === n - 1) {
+    e.preventDefault();
+    stopRecording();
+  }
+});
+
+// ============================================================
+// Audio helpers (trim, resample)
+// ============================================================
+function getTrimRange(samples, sampleRate, opts = {}) {
+  const winMs = opts.winMs ?? 15;
+  const peakRatio = opts.peakRatio ?? 0.18;
+  const marginMs = opts.marginMs ?? 5;
+  const winSize = Math.max(1, Math.floor(sampleRate * winMs / 1000));
+  const numWindows = Math.floor(samples.length / winSize);
+  if (numWindows < 3) return { start: 0, end: samples.length };
+  const rms = new Float32Array(numWindows);
+  let peak = 0;
+  for (let w = 0; w < numWindows; w++) {
+    let sumSq = 0;
+    const base = w * winSize;
+    for (let i = 0; i < winSize; i++) sumSq += samples[base + i] * samples[base + i];
+    rms[w] = Math.sqrt(sumSq / winSize);
+    if (rms[w] > peak) peak = rms[w];
+  }
+  if (peak === 0) return { start: 0, end: 0 };
+  const th = peak * peakRatio;
+  let first = 0; while (first < numWindows && rms[first] < th) first++;
+  let last = numWindows - 1; while (last > first && rms[last] < th) last--;
+  if (last <= first) return { start: 0, end: 0 };
+  const m = Math.max(0, Math.floor(marginMs / winMs));
+  first = Math.max(0, first - m);
+  last = Math.min(numWindows - 1, last + m);
+  return { start: first * winSize, end: Math.min(samples.length, (last + 1) * winSize) };
+}
+
+function resample(samples, targetLen) {
+  const out = new Float32Array(targetLen);
+  const ratio = (samples.length - 1) / Math.max(1, targetLen - 1);
+  for (let i = 0; i < targetLen; i++) {
+    const s = i * ratio;
+    const lo = Math.floor(s);
+    const hi = Math.min(samples.length - 1, lo + 1);
+    const f = s - lo;
+    out[i] = samples[lo] * (1 - f) + samples[hi] * f;
+  }
+  return out;
+}
+
+// ============================================================
+// Per-sector offset computation
+// Returns: array of {samples: Float32Array, peak: number} per slot
+// Each samples array is normalized internally (peak = 1.0 for per-sector mode)
+// ============================================================
+function buildSectorOffsets() {
+  const N = state.slots.length;
+  if (N === 0) return null;
+  const sectorRes = Math.floor(state.resolution / Math.max(1, N));
+  const result = [];
+
+  // First pass: resample each sector
+  const raws = state.slots.map(slot => {
+    if (!slot.buffer) return null;
+    const samples = slot.buffer.getChannelData(0);
+    const tr = slot.trimOverride || getTrimRange(samples, slot.buffer.sampleRate);
+    if (!tr || tr.end <= tr.start) return null;
+    const trimmed = samples.slice(tr.start, tr.end);
+    return resample(trimmed, sectorRes);
+  });
+
+  // Compute per-sector peak
+  const peaks = raws.map(r => {
+    if (!r) return 0;
+    let p = 0;
+    for (let i = 0; i < r.length; i++) {
+      const a = Math.abs(r[i]);
+      if (a > p) p = a;
+    }
+    return p;
+  });
+
+  // Global peak for global-norm mode
+  let globalPeak = 0;
+  for (const p of peaks) if (p > globalPeak) globalPeak = p;
+
+  // Normalize each sector
+  for (let s = 0; s < N; s++) {
+    const r = raws[s];
+    if (!r) { result.push(null); continue; }
+    const divisor = state.norm === 'per-sector' ? peaks[s] : globalPeak;
+    if (divisor === 0) { result.push(null); continue; }
+    const normalized = new Float32Array(r.length);
+    for (let i = 0; i < r.length; i++) normalized[i] = r[i] / divisor;
+    result.push({ samples: normalized, peak: peaks[s] });
+  }
+  return { sectors: result, sectorRes };
+}
+
+// ============================================================
+// Basis lines (positive side only — negative is mirrored)
+// ============================================================
+function basisLines() {
+  const n = state.lineCount;
+  const lines = [];
+  if (state.spacing === 'equal') {
+    for (let i = 1; i <= n; i++) lines.push(i / n);
+  } else {
+    // log: closer-packed near 0, sparser near 1
+    // Use exponential mapping: line_i = (exp(k*i/n) - 1) / (exp(k) - 1)
+    const k = 2.5;
+    for (let i = 1; i <= n; i++) {
+      lines.push((Math.exp(k * i / n) - 1) / (Math.exp(k) - 1));
+    }
+  }
+  return lines; // values in (0, 1]
+}
+
+function snapValue(v, lines) {
+  // v: signed value in [-1, 1]
+  // Snap to nearest line on the appropriate side (or to 0)
+  const a = Math.abs(v);
+  let best = 0;
+  let bestDist = a;
+  for (const line of lines) {
+    const d = Math.abs(a - line);
+    if (d < bestDist) { bestDist = d; best = line; }
+  }
+  return v >= 0 ? best : -best;
+}
+
+// ============================================================
+// Quantization
+// ============================================================
+// Build control points (idx, snapped value) for the given snap mode.
+//   Mode A: one control point at the middle of each zero-crossing region;
+//           value = the snapped extremum of that region.
+//   Mode B: one control point at every local extremum; value = snapped extremum.
+function buildControlPoints(samples, lines) {
+  const N = samples.length;
+  const pts = []; // {idx, val}
+
+  if (state.snapMode === 'A') {
+    let regStart = 0;
+    let regSign = samples[0] >= 0 ? 1 : -1;
+    let regExtreme = samples[0];
+    let regExtremeIdx = 0;
+    const pushRegion = (start, end, extreme, extremeIdx) => {
+      const mid = Math.floor((start + end - 1) / 2);
+      // Use the position of the actual extremum, not just the midpoint
+      pts.push({ idx: extremeIdx, val: snapValue(extreme, lines) });
+    };
+    for (let i = 1; i < N; i++) {
+      const sign = samples[i] >= 0 ? 1 : -1;
+      if (sign !== regSign) {
+        pushRegion(regStart, i, regExtreme, regExtremeIdx);
+        regStart = i;
+        regSign = sign;
+        regExtreme = samples[i];
+        regExtremeIdx = i;
+      } else {
+        if (regSign > 0) {
+          if (samples[i] > regExtreme) { regExtreme = samples[i]; regExtremeIdx = i; }
+        } else {
+          if (samples[i] < regExtreme) { regExtreme = samples[i]; regExtremeIdx = i; }
+        }
+      }
+    }
+    pushRegion(regStart, N, regExtreme, regExtremeIdx);
+  } else {
+    // Mode B: every local extremum
+    pts.push({ idx: 0, val: snapValue(samples[0], lines) });
+    for (let i = 1; i < N - 1; i++) {
+      const a = samples[i - 1], b = samples[i], c = samples[i + 1];
+      if ((b > a && b >= c) || (b < a && b <= c)) {
+        pts.push({ idx: i, val: snapValue(b, lines) });
+      }
+    }
+    pts.push({ idx: N - 1, val: snapValue(samples[N - 1], lines) });
+  }
+  // Ensure boundary anchors so that the curve doesn't drift at sector edges
+  if (pts.length > 0) {
+    if (pts[0].idx > 0) pts.unshift({ idx: 0, val: pts[0].val });
+    if (pts[pts.length - 1].idx < N - 1) pts.push({ idx: N - 1, val: pts[pts.length - 1].val });
+  }
+  return pts;
+}
+
+function preSmoothSamples(samples, passes) {
+  if (passes <= 0) return samples;
+  let s = samples;
+  for (let p = 0; p < passes; p++) {
+    const out = new Float32Array(s.length);
+    for (let i = 0; i < s.length; i++) {
+      const prev = i > 0 ? s[i - 1] : s[i];
+      const next = i < s.length - 1 ? s[i + 1] : s[i];
+      out[i] = (prev + s[i] * 2 + next) / 4;
+    }
+    s = out;
+  }
+  return s;
+}
+
+function quantizeSector(samples, lines) {
+  if (state.snapMode === 'off') return samples.slice();
+  const N = samples.length;
+  const out = new Float32Array(N);
+  const detectionInput = preSmoothSamples(samples, state.preSmooth);
+  const pts = buildControlPoints(detectionInput, lines);
+  if (pts.length === 0) return out;
+  if (pts.length === 1) {
+    for (let i = 0; i < N; i++) out[i] = pts[0].val;
+    return out;
+  }
+
+  // Step: hold each control point's value until the next control point's index
+  //       (creates flat plateaus and abrupt jumps).
+  if (state.connect === 'step') {
+    let pi = 0;
+    for (let i = 0; i < N; i++) {
+      while (pi < pts.length - 1 && i >= pts[pi + 1].idx) pi++;
+      out[i] = pts[pi].val;
+    }
+    return out;
+  }
+
+  // Linear / smooth: interpolate between consecutive control points.
+  let pi = 0;
+  for (let i = 0; i < N; i++) {
+    while (pi < pts.length - 2 && i >= pts[pi + 1].idx) pi++;
+    const a = pts[pi];
+    const b = pts[pi + 1] || a;
+    const span = Math.max(1, b.idx - a.idx);
+    let t = (i - a.idx) / span;
+    if (t < 0) t = 0; else if (t > 1) t = 1;
+    if (state.connect === 'smooth') t = t * t * (3 - 2 * t);
+    out[i] = a.val * (1 - t) + b.val * t;
+  }
+  return out;
+}
+
+// ============================================================
+// Rendering
+// ============================================================
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', () => { resize(); render(); });
+
+function render() {
+  resize();
+  const W = canvas.clientWidth;
+  const H = canvas.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+
+  const data = buildSectorOffsets();
+  if (!data || data.sectors.every(s => !s)) {
+    ctx.fillStyle = '#bbb';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('名前を入力 → 録音すると波形が現れます', W / 2, H / 2);
+    document.getElementById('status').textContent = '';
+    document.getElementById('info').textContent = '';
+    return;
+  }
+
+  const lines = basisLines();
+  const N = state.slots.length;
+  const validCount = data.sectors.filter(s => s).length;
+  document.getElementById('status').textContent =
+    `${state.view === 'linear' ? '直線' : '円'}表示 / ${validCount}/${N} 録音済 / 基準線 ${state.lineCount}本 (${state.spacing === 'equal' ? '等間隔' : '対数'})`;
+
+  if (state.view === 'linear') drawLinear(W, H, data.sectors, lines);
+  else drawCircle(W, H, data.sectors, lines);
+
+  // info
+  let totalSamples = 0, totalQuantSamples = 0;
+  for (const s of data.sectors) {
+    if (!s) continue;
+    totalSamples += s.samples.length;
+    totalQuantSamples += quantizeSector(s.samples, lines).length;
+  }
+  document.getElementById('info').textContent =
+    state.snapMode === 'off' ? '量子化: OFF' : `量子化: ${state.snapMode} / ${state.connect}`;
+}
+
+function drawLinear(W, H, sectors, lines) {
+  const padL = 60, padR = 40, padT = 50, padB = 50;
+  const fullInnerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const cy = padT + innerH / 2;
+  const ampH = innerH / 2 * 0.94;
+  const N = sectors.length;
+
+  // Apply zoom & horizontal pan: viewport shows fullInnerW / zoom of the timeline.
+  // Build a clip region so anything outside doesn't draw over labels.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(padL, padT - 2, fullInnerW, innerH + 4);
+  ctx.clip();
+
+  // Visible timeline span (in original "1.0 width" units, where 1.0 = whole timeline)
+  const visibleSpan = 1 / state.linZoom;
+  const startFrac = state.linOffsetX;
+
+  // Helper: convert "timeline fraction" [0..1] → pixel x within [padL, padL+fullInnerW]
+  function tlToPx(frac) {
+    return padL + ((frac - startFrac) / visibleSpan) * fullInnerW;
+  }
+
+  // basis lines (full width)
+  if (state.show.lines) {
+    for (const ln of lines) {
+      const isHl = state.highlightLine === ln;
+      ctx.strokeStyle = isHl ? '#c8331c' : '#e8e8e8';
+      ctx.lineWidth = isHl ? 1.5 : 1;
+      for (const sign of [-1, 1]) {
+        const y = cy - sign * ln * ampH;
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(padL + fullInnerW, y);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // 0 line
+  if (state.show.zero) {
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padL, cy);
+    ctx.lineTo(padL + fullInnerW, cy);
+    ctx.stroke();
+  }
+
+  // sector boundaries + labels
+  for (let s = 0; s < N; s++) {
+    const sectorStartFrac = s / N;
+    const sectorEndFrac = (s + 1) / N;
+    const x0 = tlToPx(sectorStartFrac);
+    const x1 = tlToPx(sectorEndFrac);
+    if (s > 0 && state.show.sectors) {
+      ctx.strokeStyle = '#ddd';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(x0, padT);
+      ctx.lineTo(x0, padT + innerH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    // char label (clipped if outside visible area)
+    ctx.fillStyle = '#999';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(state.slots[s].char, (x0 + x1) / 2, padT + innerH + 12);
+  }
+
+  // waveforms per sector
+  for (let s = 0; s < N; s++) {
+    const sec = sectors[s];
+    if (!sec) continue;
+    const sectorStartFrac = s / N;
+    const sectorWFrac = 1 / N;
+
+    // raw waveform: plot each sample
+    if (state.show.raw) {
+      ctx.strokeStyle = 'rgba(74,158,255,0.55)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i < sec.samples.length; i++) {
+        const frac = sectorStartFrac + (i / Math.max(1, sec.samples.length - 1)) * sectorWFrac;
+        const x = tlToPx(frac);
+        const y = cy - sec.samples[i] * ampH;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    // quantized: draw using control points + sub-sample rendering (decouples
+    // visual smoothness from input sample density)
+    if (state.show.quant && state.snapMode !== 'off') {
+      const detect = preSmoothSamples(sec.samples, state.preSmooth);
+      const pts = buildControlPoints(detect, lines);
+      drawQuantizedLinear(pts, sec.samples.length, sectorStartFrac, sectorWFrac, tlToPx, cy, ampH);
+    }
+  }
+
+  ctx.restore();
+
+  // labels for basis lines (left margin, outside clip)
+  if (state.show.lines) {
+    for (const ln of lines) {
+      const isHl = state.highlightLine === ln;
+      for (const sign of [-1, 1]) {
+        const y = cy - sign * ln * ampH;
+        ctx.fillStyle = isHl ? '#c8331c' : '#bbb';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText((sign > 0 ? '+' : '−') + ln.toFixed(2), padL - 6, y);
+      }
+    }
+  }
+
+  // top hint: zoom level
+  if (state.linZoom !== 1 || state.linOffsetX !== 0) {
+    ctx.fillStyle = '#888';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`×${state.linZoom.toFixed(1)}  オフセット ${(state.linOffsetX * 100).toFixed(0)}%`, padL, 8);
+  }
+}
+
+// Draw quantized curve for one sector using control points and current connect
+// mode. Sub-samples each segment by pixel-width so smoothstep renders smooth
+// regardless of input sample density.
+function drawQuantizedLinear(pts, secSampleCount, secStartFrac, secWFrac, tlToPx, cy, ampH) {
+  if (!pts || pts.length === 0) return;
+  ctx.strokeStyle = '#c8331c';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+
+  function plot(ptIdx, val, first) {
+    const frac = secStartFrac + (ptIdx / Math.max(1, secSampleCount - 1)) * secWFrac;
+    const x = tlToPx(frac);
+    const y = cy - val * ampH;
+    if (first) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+
+  // Start at first control point
+  plot(pts[0].idx, pts[0].val, true);
+
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    if (state.connect === 'step') {
+      // hold a.val until b.idx, then jump to b.val
+      plot(b.idx, a.val, false);
+      plot(b.idx, b.val, false);
+    } else {
+      // sub-sample the interpolation by pixel width (~1 sub-step per 2px)
+      const xa = tlToPx(secStartFrac + (a.idx / Math.max(1, secSampleCount - 1)) * secWFrac);
+      const xb = tlToPx(secStartFrac + (b.idx / Math.max(1, secSampleCount - 1)) * secWFrac);
+      const pxSpan = Math.abs(xb - xa);
+      const steps = Math.max(2, Math.ceil(pxSpan / 2));
+      for (let j = 1; j <= steps; j++) {
+        let t = j / steps;
+        if (state.connect === 'smooth') t = t * t * (3 - 2 * t);
+        const v = a.val * (1 - t) + b.val * t;
+        const idx = a.idx + (b.idx - a.idx) * (j / steps);
+        plot(idx, v, false);
+      }
+    }
+  }
+  ctx.stroke();
+}
+
+function drawCircle(W, H, sectors, lines) {
+  const cx = W / 2, cy = H / 2;
+  const baseR = Math.min(W, H) * 0.32;
+  const variation = state.variation * baseR;
+  const N = sectors.length;
+
+  // basis line rings (faint, optional)
+  if (state.show.lines) {
+    for (const ln of lines) {
+      for (const sign of [-1, 1]) {
+        const r = baseR + sign * ln * variation;
+        ctx.strokeStyle = state.highlightLine === ln ? 'rgba(200,51,28,0.45)' : 'rgba(0,0,0,0.07)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // 0 line = base circle (only if showZero)
+  if (state.show.zero) {
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, baseR, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // sector dividers
+  if (state.show.sectors) {
+    ctx.strokeStyle = '#eee';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < N; i++) {
+      const a = -Math.PI / 2 + (i / N) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(a) * baseR * 1.45, cy + Math.sin(a) * baseR * 1.45);
+      ctx.stroke();
+    }
+  }
+
+  // char labels
+  ctx.fillStyle = '#999';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i < N; i++) {
+    const a = -Math.PI / 2 + ((i + 0.5) / N) * Math.PI * 2;
+    ctx.fillText(state.slots[i].char, cx + Math.cos(a) * baseR * 1.52, cy + Math.sin(a) * baseR * 1.52);
+  }
+
+  // ---- Raw waveform (sample-density polygon) ----
+  function drawRawClosed(color, lw) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    let started = false;
+    for (let s = 0; s < N; s++) {
+      const sec = sectors[s];
+      if (!sec) continue;
+      const src = sec.samples;
+      const len = src.length;
+      for (let i = 0; i < len; i++) {
+        const angle = -Math.PI / 2 + ((s + i / len) / N) * Math.PI * 2;
+        const r = baseR + src[i] * variation;
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        if (!started) { ctx.moveTo(x, y); started = true; }
+        else ctx.lineTo(x, y);
+      }
+    }
+    if (started) { ctx.closePath(); ctx.stroke(); }
+  }
+
+  if (state.show.raw) drawRawClosed('rgba(74,158,255,0.6)', 1);
+
+  // ---- Quantized: control-point-driven sub-sampled rendering ----
+  // For each consecutive pair of control points, sub-sample angularly so that
+  // smoothstep and linear connections render at canvas pixel resolution rather
+  // than at input sample density. This eliminates the polygonal corners that
+  // appear when sample density is low.
+  function drawQuantClosed(color, lw) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    let started = false;
+
+    // Approximate circumferential pixel cost per sector to choose sub-sample count
+    const circumPx = 2 * Math.PI * (baseR + variation);
+    const pxPerSector = circumPx / N;
+
+    for (let s = 0; s < N; s++) {
+      const sec = sectors[s];
+      if (!sec) continue;
+      const detect = preSmoothSamples(sec.samples, state.preSmooth);
+      const pts = buildControlPoints(detect, lines);
+      if (!pts.length) continue;
+      const secStartAngle = -Math.PI / 2 + (s / N) * Math.PI * 2;
+      const secSpanAngle = (1 / N) * Math.PI * 2;
+      const sampleLen = sec.samples.length;
+
+      const plot = (idxFrac, val, first) => {
+        const angle = secStartAngle + idxFrac * secSpanAngle;
+        const r = baseR + val * variation;
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        if (first && !started) { ctx.moveTo(x, y); started = true; }
+        else ctx.lineTo(x, y);
+      };
+
+      // Start at first control point
+      plot(pts[0].idx / Math.max(1, sampleLen - 1), pts[0].val, true);
+
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        const aFrac = a.idx / Math.max(1, sampleLen - 1);
+        const bFrac = b.idx / Math.max(1, sampleLen - 1);
+        if (state.connect === 'step') {
+          plot(bFrac, a.val, false);
+          plot(bFrac, b.val, false);
+        } else {
+          // sub-step density based on pixel arc length
+          const arcPx = Math.abs(bFrac - aFrac) * pxPerSector;
+          const steps = Math.max(2, Math.ceil(arcPx / 2));
+          for (let j = 1; j <= steps; j++) {
+            let t = j / steps;
+            if (state.connect === 'smooth') t = t * t * (3 - 2 * t);
+            const v = a.val * (1 - t) + b.val * t;
+            const fr = aFrac + (bFrac - aFrac) * (j / steps);
+            plot(fr, v, false);
+          }
+        }
+      }
+    }
+    if (started) { ctx.closePath(); ctx.stroke(); }
+  }
+
+  if (state.show.quant && state.snapMode !== 'off') {
+    drawQuantClosed('#c8331c', 1.5);
+  } else if (!state.show.raw) {
+    drawRawClosed('#222', 1.2);
+  }
+}
+
+// ============================================================
+// Linear view interactions: click-line-to-highlight, wheel zoom, drag pan
+// ============================================================
+const LIN_PAD = { L: 60, R: 40, T: 50, B: 50 };
+
+function clampLinView() {
+  if (state.linZoom < 1) state.linZoom = 1;
+  if (state.linZoom > 200) state.linZoom = 200;
+  const maxOff = 1 - 1 / state.linZoom;
+  if (state.linOffsetX < 0) state.linOffsetX = 0;
+  if (state.linOffsetX > maxOff) state.linOffsetX = maxOff;
+}
+
+let linDrag = null;
+const LIN_DRAG_THRESHOLD = 4;
+
+canvas.addEventListener('mousedown', e => {
+  if (state.view !== 'linear') return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const W = canvas.clientWidth;
+  const innerW = W - LIN_PAD.L - LIN_PAD.R;
+  if (x < LIN_PAD.L || x > LIN_PAD.L + innerW) return;
+  linDrag = { startX: e.clientX, startOffset: state.linOffsetX, innerW, moved: false, downX: x, downY: e.clientY - rect.top };
+});
+window.addEventListener('mousemove', e => {
+  if (!linDrag) return;
+  const dx = e.clientX - linDrag.startX;
+  if (!linDrag.moved && Math.abs(dx) > LIN_DRAG_THRESHOLD) {
+    linDrag.moved = true;
+    canvas.style.cursor = 'grabbing';
+  }
+  if (linDrag.moved) {
+    state.linOffsetX = linDrag.startOffset - (dx / linDrag.innerW) / state.linZoom;
+    clampLinView();
+    render();
+  }
+});
+window.addEventListener('mouseup', e => {
+  if (!linDrag) return;
+  if (!linDrag.moved) {
+    // Treat as click: hit-test basis line for highlight
+    if (state.show.lines) {
+      const W = canvas.clientWidth;
+      const H = canvas.clientHeight;
+      const innerH = H - LIN_PAD.T - LIN_PAD.B;
+      const cy = LIN_PAD.T + innerH / 2;
+      const ampH = innerH / 2 * 0.94;
+      const y = linDrag.downY;
+      const lines = basisLines();
+      let best = null, bestDist = 6;
+      for (const ln of lines) {
+        for (const sign of [-1, 1]) {
+          const ly = cy - sign * ln * ampH;
+          const d = Math.abs(y - ly);
+          if (d < bestDist) { bestDist = d; best = ln; }
+        }
+      }
+      state.highlightLine = (state.highlightLine === best ? null : best);
+      render();
+    }
+  }
+  canvas.style.cursor = '';
+  linDrag = null;
+});
+
+canvas.addEventListener('wheel', e => {
+  if (state.view !== 'linear') return;
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const W = canvas.clientWidth;
+  const innerW = W - LIN_PAD.L - LIN_PAD.R;
+  if (x < LIN_PAD.L || x > LIN_PAD.L + innerW) return;
+  const mouseInner = (x - LIN_PAD.L) / innerW; // 0..1 within visible
+  const sampleFracBefore = state.linOffsetX + mouseInner / state.linZoom;
+  const factor = Math.exp(-e.deltaY * 0.002);
+  state.linZoom *= factor;
+  if (state.linZoom < 1) state.linZoom = 1;
+  if (state.linZoom > 200) state.linZoom = 200;
+  state.linOffsetX = sampleFracBefore - mouseInner / state.linZoom;
+  clampLinView();
+  render();
+}, { passive: false });
+
+canvas.addEventListener('dblclick', () => {
+  if (state.view !== 'linear') return;
+  state.linZoom = 1;
+  state.linOffsetX = 0;
+  render();
+});
+
+// ============================================================
+// Playback (play all sectors sequentially)
+// ============================================================
+let playbackSource = null;
+async function togglePlaybackAll() {
+  if (playbackSource) {
+    try { playbackSource.stop(); } catch (e) {}
+    playbackSource = null;
+    return;
+  }
+  await ensureAudioCtx();
+  // Concatenate trimmed buffers
+  const parts = [];
+  let totalLen = 0;
+  let sr = 44100;
+  for (const slot of state.slots) {
+    if (!slot.buffer) continue;
+    const samples = slot.buffer.getChannelData(0);
+    const tr = slot.trimOverride || getTrimRange(samples, slot.buffer.sampleRate);
+    if (!tr || tr.end <= tr.start) continue;
+    const t = samples.slice(tr.start, tr.end);
+    parts.push(t);
+    totalLen += t.length;
+    sr = slot.buffer.sampleRate;
+  }
+  if (totalLen === 0) return;
+  const buf = audioCtx.createBuffer(1, totalLen, sr);
+  const ch = buf.getChannelData(0);
+  let off = 0;
+  for (const p of parts) { ch.set(p, off); off += p.length; }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.connect(audioCtx.destination);
+  src.onended = () => { if (playbackSource === src) playbackSource = null; };
+  src.start();
+  playbackSource = src;
+}
+
+// ============================================================
+// Wire controls
+// ============================================================
+function setupToggle(id, key) {
+  const el = document.getElementById(id);
+  el.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      el.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state[key] = btn.dataset.val;
+      render();
+    });
+  });
+}
+setupToggle('snapModeToggle', 'snapMode');
+setupToggle('connectToggle', 'connect');
+setupToggle('spacingToggle', 'spacing');
+setupToggle('normToggle', 'norm');
+setupToggle('viewToggle', 'view');
+
+function setupSlider(id, key, scale, suffix, valId) {
+  const slider = document.getElementById(id);
+  const valEl = document.getElementById(valId);
+  slider.addEventListener('input', () => {
+    const raw = parseFloat(slider.value);
+    state[key] = scale ? raw * scale : raw;
+    valEl.textContent = Math.round(raw) + suffix;
+    render();
+  });
+}
+setupSlider('lineCount', 'lineCount', 1, '', 'lineCountVal');
+setupSlider('variation', 'variation', 0.01, '%', 'variationVal');
+setupSlider('res', 'resolution', 1, '', 'resVal');
+setupSlider('preSmooth', 'preSmooth', 1, '', 'preSmoothVal');
+
+['showRaw', 'showQuant', 'showLines', 'showZero', 'showSectors'].forEach(id => {
+  document.getElementById(id).addEventListener('change', e => {
+    const key = id.replace('show', '').toLowerCase();
+    state.show[key] = e.target.checked;
+    render();
+  });
+});
+
+render();
+</script>
+</body>
+</html>
