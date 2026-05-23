@@ -363,29 +363,63 @@
   </main>
 
   <aside class="right">
+    <h2>表示</h2>
+    <div class="toggle" id="viewToggle">
+      <button data-val="circle" class="active">円</button>
+      <button data-val="linear">直線</button>
+    </div>
+    <div class="checks" style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:#444;margin-top:8px;">
+      <label><input type="checkbox" id="showRaw"> 生波形</label>
+      <label><input type="checkbox" id="showQuant" checked> 量子化後</label>
+      <label><input type="checkbox" id="showLines"> 基準線</label>
+      <label><input type="checkbox" id="showZero"> 0ライン（円の場合は基準円）</label>
+      <label><input type="checkbox" id="showSectors" checked> セクタ境界</label>
+      <label><input type="checkbox" id="showBoundaryOnCircle" checked> 子音/母音の境界</label>
+    </div>
+
+    <h2>量子化モード</h2>
+    <div class="toggle" id="snapModeToggle">
+      <button data-val="off">OFF</button>
+      <button data-val="A" class="active">A：山ごと</button>
+      <button data-val="B">B：方向転換</button>
+    </div>
+    <div class="hint">A=0クロスで区切った山の最大値だけスナップ。B=極値ごとにスナップ。</div>
+
+    <h2>接続方法</h2>
+    <div class="toggle" id="connectToggle">
+      <button data-val="step">階段</button>
+      <button data-val="linear">線形</button>
+      <button data-val="smooth" class="active">滑らか</button>
+    </div>
+
+    <h2>基準線</h2>
+    <div class="toggle" id="spacingToggle">
+      <button data-val="equal" class="active">等間隔</button>
+      <button data-val="log">対数</button>
+    </div>
+    <div class="control" style="margin-top:8px;">
+      <label><span>本数（片側）</span><span class="val" id="lineCountVal">5</span></label>
+      <input type="range" id="lineCount" min="1" max="20" value="5">
+    </div>
+
+    <h2>正規化</h2>
+    <div class="toggle" id="normToggle">
+      <button data-val="per-sector" class="active">文字ごと</button>
+      <button data-val="global">全体</button>
+    </div>
+    <div class="hint">文字ごと：文字間の音量差をキャンセル。全体：v1 互換。</div>
+
     <h2>解像度</h2>
     <div class="toggle" id="resolutionToggle">
       <button data-val="512" class="active">512</button>
       <button data-val="1024">1024</button>
     </div>
-    <div class="hint">セクタごとの描画点数（高いほど波形の細部が見える）</div>
-
-    <h2>オフセット方向</h2>
-    <div class="toggle" id="directionToggle">
-      <button data-val="outward" class="active">外向きのみ</button>
-      <button data-val="both">両側</button>
-    </div>
 
     <h2>境界処理</h2>
     <div class="toggle" id="boundaryToggle">
-      <button data-val="fade" class="active">フェード</button>
-      <button data-val="sharp">シャープ</button>
+      <button data-val="fade">フェード</button>
+      <button data-val="sharp" class="active">シャープ</button>
     </div>
-
-    <h2>円上の補助表示</h2>
-    <label style="font-size:11px; color:#555; display:block; margin-top:4px;">
-      <input type="checkbox" id="showBoundaryOnCircle" checked> 子音/母音の境界を表示
-    </label>
 
     <div class="control" style="margin-top: 20px;">
       <label><span>変動量</span><span class="val" id="variationVal">30%</span></label>
@@ -393,27 +427,18 @@
     </div>
 
     <div class="control">
-      <label><span>スムージング</span><span class="val" id="smoothVal">2</span></label>
-      <input type="range" id="smooth" min="0" max="10" value="2">
-      <div class="hint">周方向の平均化回数（0=生波形、大=なめらか）</div>
-    </div>
-
-    <div class="control">
       <label><span>フェード幅</span><span class="val" id="fadeVal">8%</span></label>
       <input type="range" id="fade" min="0" max="30" value="8">
-      <div class="hint">境界処理がフェード時、両端をベース半径に補間する範囲</div>
     </div>
 
     <div class="control">
       <label><span>トリミング感度</span><span class="val" id="trimRatioVal">18%</span></label>
       <input type="range" id="trimRatio" min="1" max="50" value="18">
-      <div class="hint">ピークRMSの何%以下を無音とみなすか（大きい=きつく削る）</div>
     </div>
 
     <div class="control">
       <label><span>トリミング余白</span><span class="val" id="trimMarginVal">5 ms</span></label>
       <input type="range" id="trimMargin" min="0" max="50" value="5">
-      <div class="hint">削除した境界の前後に残す保護領域（子音アタックを守る）</div>
     </div>
   </aside>
 </div>
@@ -434,6 +459,7 @@
       <button id="trimReset" title="自動トリミングに戻す">トリミング自動に戻す</button>
       <label style="margin-left:12px;"><input type="checkbox" id="toggleEnv" checked> エンベロープ</label>
       <label><input type="checkbox" id="toggleVowel" checked> 母音区間</label>
+      <label><input type="checkbox" id="toggleQuantModal" checked> 量子化</label>
       <span class="spacer"></span>
       <span>Space=再生/停止 / オレンジ線をドラッグで範囲調整 / ホイール拡縮 / ダブルクリックで全体表示</span>
     </div>
@@ -455,24 +481,35 @@
 // ============================================================
 const state = {
   name: '',
-  slots: [], // each: { char, buffer (AudioBuffer|null), recording, miniCanvas }
+  slots: [],
   resolution: 512,
-  direction: 'outward', // 'outward' | 'both'
-  boundary: 'fade',     // 'fade' | 'sharp'
+  boundary: 'sharp',    // 'fade' | 'sharp'
   variation: 0.30,
-  smooth: 2,
   fadePct: 0.08,
-  trimRatio: 0.18,  // RMS threshold = peakRMS * trimRatio
-  trimMargin: 5,    // ms margin around trim region
+  trimRatio: 0.18,
+  trimMargin: 5,
+  // Quantization (merged from quantize_demo)
+  snapMode: 'A',        // 'off' | 'A' | 'B'
+  connect: 'smooth',    // 'step' | 'linear' | 'smooth'
+  spacing: 'equal',     // 'equal' | 'log'
+  lineCount: 5,
+  norm: 'per-sector',   // 'per-sector' | 'global'
+  // View / display
+  view: 'circle',       // 'linear' | 'circle'
+  show: { raw: false, quant: true, lines: false, zero: false, sectors: true },
+  showBoundaryOnCircle: true,
+  showQuantInModal: true,
+  // Linear view interaction
+  linZoom: 1,
+  linOffsetX: 0,
+  highlightLine: null,
 };
 
 let audioCtx = null;
 let activeRecorder = null;
 let activeRecorderSlotIndex = -1;
 let activeRecorderChunks = [];
-let persistentStream = null; // kept alive across recordings to avoid getUserMedia latency
-
-state.showBoundaryOnCircle = true;
+let persistentStream = null;
 
 // ============================================================
 // Audio helpers
@@ -709,8 +746,12 @@ function setupToggle(id, key, onChange) {
   });
 }
 setupToggle('resolutionToggle', 'resolution');
-setupToggle('directionToggle', 'direction');
 setupToggle('boundaryToggle', 'boundary');
+setupToggle('viewToggle', 'view');
+setupToggle('snapModeToggle', 'snapMode');
+setupToggle('connectToggle', 'connect');
+setupToggle('spacingToggle', 'spacing');
+setupToggle('normToggle', 'norm');
 
 function setupSlider(id, key, scale, suffix, valId) {
   const slider = document.getElementById(id);
@@ -723,11 +764,22 @@ function setupSlider(id, key, scale, suffix, valId) {
   });
 }
 setupSlider('variation', 'variation', 0.01, '%', 'variationVal');
-setupSlider('smooth', 'smooth', 1, '', 'smoothVal');
 setupSlider('fade', 'fadePct', 0.01, '%', 'fadeVal');
 setupSlider('trimRatio', 'trimRatio', 0.01, '%', 'trimRatioVal');
 setupSlider('trimMargin', 'trimMargin', 1, ' ms', 'trimMarginVal');
+setupSlider('lineCount', 'lineCount', 1, '', 'lineCountVal');
 
+// Show/hide checkboxes
+['showRaw', 'showQuant', 'showLines', 'showZero', 'showSectors'].forEach(id => {
+  const key = id.replace('show', '').toLowerCase();
+  const el = document.getElementById(id);
+  // Sync initial state with checkbox
+  el.checked = state.show[key];
+  el.addEventListener('change', e => {
+    state.show[key] = e.target.checked;
+    updateAll();
+  });
+});
 document.getElementById('showBoundaryOnCircle').addEventListener('change', e => {
   state.showBoundaryOnCircle = e.target.checked;
   updateAll();
@@ -751,72 +803,130 @@ function refreshTrimInModal() {
 });
 
 // ============================================================
-// Shape computation
+// Shape computation — produces per-sector normalized sample arrays.
+// Each sector is independently normalized (per-sector mode) so loud/quiet
+// character recordings don't squash each other; "global" mode is the v1
+// behavior (kept as toggle).
 // ============================================================
-function computeShape() {
+function buildSectorOffsets() {
   const N = state.slots.length;
-  const validSlots = state.slots.filter(s => s.buffer);
-  if (N === 0 || validSlots.length === 0) return null;
+  if (N === 0) return null;
+  const sectorRes = Math.floor(state.resolution / Math.max(1, N));
 
-  const resPerSector = Math.floor(state.resolution / N);
-  const totalPoints = resPerSector * N;
-
-  // For each sector, compute radial offsets
-  const offsets = new Float32Array(totalPoints); // 0..1 (will be scaled later)
-
-  for (let s = 0; s < N; s++) {
-    const slot = state.slots[s];
-    const sectorStart = s * resPerSector;
-    if (!slot.buffer) {
-      // empty sector: keep 0
-      continue;
-    }
+  const raws = state.slots.map(slot => {
+    if (!slot.buffer) return null;
     const samples = slot.buffer.getChannelData(0);
-    // Always trim leading/trailing silence so the sector represents the voiced
-    // portion only. Boundary handling (sharp vs fade) only differs at edges.
     const tr = effectiveTrim(slot);
-    const source = (tr && tr.end > tr.start) ? samples.slice(tr.start, tr.end) : new Float32Array(0);
-    if (source.length === 0) continue;
-    const resampled = resample(source, resPerSector);
-    for (let i = 0; i < resPerSector; i++) {
-      offsets[sectorStart + i] = resampled[i];
-    }
-    if (state.boundary === 'fade') {
-      applyFade(offsets, sectorStart, resPerSector, state.fadePct);
-    }
-    // sharp: no edge taper — boundary value = last trimmed sample (small but non-zero)
-  }
+    if (!tr || tr.end <= tr.start) return null;
+    const trimmed = samples.slice(tr.start, tr.end);
+    const r = resample(trimmed, sectorRes);
+    if (state.boundary === 'fade') applyFade(r, 0, r.length, state.fadePct);
+    return r;
+  });
 
-  // Direction handling
-  if (state.direction === 'outward') {
-    for (let i = 0; i < totalPoints; i++) {
-      offsets[i] = Math.abs(offsets[i]);
+  const peaks = raws.map(r => {
+    if (!r) return 0;
+    let p = 0;
+    for (let i = 0; i < r.length; i++) { const a = Math.abs(r[i]); if (a > p) p = a; }
+    return p;
+  });
+  let globalPeak = 0;
+  for (const p of peaks) if (p > globalPeak) globalPeak = p;
+
+  const sectors = [];
+  for (let s = 0; s < N; s++) {
+    const r = raws[s];
+    if (!r) { sectors.push(null); continue; }
+    const divisor = state.norm === 'per-sector' ? peaks[s] : globalPeak;
+    if (divisor === 0) { sectors.push(null); continue; }
+    const normalized = new Float32Array(r.length);
+    for (let i = 0; i < r.length; i++) normalized[i] = r[i] / divisor;
+    sectors.push({ samples: normalized, peak: peaks[s] });
+  }
+  return { sectors, sectorRes };
+}
+
+// ============================================================
+// Quantization (basis lines, snap, control points)
+// ============================================================
+function basisLines() {
+  const n = state.lineCount;
+  const lines = [];
+  if (state.spacing === 'equal') {
+    for (let i = 1; i <= n; i++) lines.push(i / n);
+  } else {
+    const k = 2.5;
+    for (let i = 1; i <= n; i++) {
+      lines.push((Math.exp(k * i / n) - 1) / (Math.exp(k) - 1));
     }
   }
-  // both: keep signed
+  return lines;
+}
 
-  // Normalize so max abs = 1
-  let maxAbs = 0;
-  for (let i = 0; i < totalPoints; i++) {
-    const a = Math.abs(offsets[i]);
-    if (a > maxAbs) maxAbs = a;
+function snapValue(v, lines) {
+  const a = Math.abs(v);
+  let best = 0, bestDist = a;
+  for (const line of lines) {
+    const d = Math.abs(a - line);
+    if (d < bestDist) { bestDist = d; best = line; }
   }
-  if (maxAbs > 0) {
-    for (let i = 0; i < totalPoints; i++) offsets[i] /= maxAbs;
-  }
+  return v >= 0 ? best : -best;
+}
 
-  // Smoothing (circular)
-  for (let pass = 0; pass < state.smooth; pass++) {
-    const tmp = new Float32Array(totalPoints);
-    for (let i = 0; i < totalPoints; i++) {
-      const prev = offsets[(i - 1 + totalPoints) % totalPoints];
-      const next = offsets[(i + 1) % totalPoints];
-      tmp[i] = (prev + offsets[i] * 2 + next) / 4;
+// Build control points (idx, val) for one sector based on snap mode.
+function buildControlPoints(samples, lines) {
+  const N = samples.length;
+  const pts = [];
+  if (state.snapMode === 'A') {
+    let regStart = 0;
+    let regSign = samples[0] >= 0 ? 1 : -1;
+    let regExtreme = samples[0];
+    let regExtremeIdx = 0;
+    for (let i = 1; i < N; i++) {
+      const sign = samples[i] >= 0 ? 1 : -1;
+      if (sign !== regSign) {
+        pts.push({ idx: regExtremeIdx, val: snapValue(regExtreme, lines) });
+        regStart = i; regSign = sign; regExtreme = samples[i]; regExtremeIdx = i;
+      } else {
+        if (regSign > 0) { if (samples[i] > regExtreme) { regExtreme = samples[i]; regExtremeIdx = i; } }
+        else { if (samples[i] < regExtreme) { regExtreme = samples[i]; regExtremeIdx = i; } }
+      }
     }
-    offsets.set(tmp);
+    pts.push({ idx: regExtremeIdx, val: snapValue(regExtreme, lines) });
+  } else {
+    pts.push({ idx: 0, val: snapValue(samples[0], lines) });
+    for (let i = 1; i < N - 1; i++) {
+      const a = samples[i - 1], b = samples[i], c = samples[i + 1];
+      if ((b > a && b >= c) || (b < a && b <= c)) {
+        pts.push({ idx: i, val: snapValue(b, lines) });
+      }
+    }
+    pts.push({ idx: N - 1, val: snapValue(samples[N - 1], lines) });
   }
+  if (pts.length > 0) {
+    if (pts[0].idx > 0) pts.unshift({ idx: 0, val: pts[0].val });
+    if (pts[pts.length - 1].idx < N - 1) pts.push({ idx: N - 1, val: pts[pts.length - 1].val });
+  }
+  return pts;
+}
 
-  return offsets;
+// Sample interpolated value at index idx between consecutive control points
+// according to current connect mode. (Used for raw sample replacement when
+// snapMode='off' or for building SVG paths.)
+function interpolateAt(idx, ptsOrSamples, isControlPoints) {
+  if (isControlPoints) {
+    const pts = ptsOrSamples;
+    let pi = 0;
+    while (pi < pts.length - 2 && idx >= pts[pi + 1].idx) pi++;
+    const a = pts[pi], b = pts[pi + 1] || a;
+    if (state.connect === 'step') return a.val;
+    const span = Math.max(1, b.idx - a.idx);
+    let t = (idx - a.idx) / span;
+    if (t < 0) t = 0; else if (t > 1) t = 1;
+    if (state.connect === 'smooth') t = t * t * (3 - 2 * t);
+    return a.val * (1 - t) + b.val * t;
+  }
+  return ptsOrSamples[Math.max(0, Math.min(ptsOrSamples.length - 1, Math.round(idx)))];
 }
 
 // RMS-based silence trimming: more robust than raw-amplitude threshold.
@@ -905,29 +1015,6 @@ function resizeCanvas() {
 }
 window.addEventListener('resize', () => { resizeCanvas(); drawShape(); });
 
-function buildPath(offsets) {
-  if (!offsets || offsets.length === 0) return [];
-  const W = canvas.width / (window.devicePixelRatio || 1);
-  const H = canvas.height / (window.devicePixelRatio || 1);
-  const cx = W / 2;
-  const cy = H / 2;
-  const baseR = Math.min(W, H) * 0.36;
-  const variation = state.variation * baseR;
-  const N = offsets.length;
-  const pts = [];
-  for (let i = 0; i < N; i++) {
-    // angle 0 starts at 12 o'clock and goes clockwise
-    const t = i / N;
-    const angle = -Math.PI / 2 + t * Math.PI * 2;
-    const r = baseR + offsets[i] * variation;
-    pts.push({
-      x: cx + Math.cos(angle) * r,
-      y: cy + Math.sin(angle) * r,
-    });
-  }
-  return pts;
-}
-
 function drawShape() {
   const W = canvas.width / (window.devicePixelRatio || 1);
   const H = canvas.height / (window.devicePixelRatio || 1);
@@ -940,30 +1027,71 @@ function drawShape() {
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('名前を入力してください', W / 2, H / 2);
+    document.getElementById('exportSvg').disabled = true;
+    document.getElementById('status').textContent = '';
     return;
   }
 
-  // base circle (very light)
+  const data = buildSectorOffsets();
+  const hasAny = data && data.sectors.some(s => s);
+
+  if (state.view === 'linear') {
+    drawLinearView(W, H, data && data.sectors, hasAny);
+  } else {
+    drawCircleView(W, H, data && data.sectors, hasAny);
+  }
+
+  document.getElementById('exportSvg').disabled = !hasAny;
+  const recordedCount = state.slots.filter(s => s.buffer).length;
+  document.getElementById('status').textContent = `録音済 ${recordedCount} / ${state.slots.length}`;
+}
+
+function drawCircleView(W, H, sectors, hasAny) {
   const cx = W / 2, cy = H / 2;
   const baseR = Math.min(W, H) * 0.36;
-  ctx.strokeStyle = '#eee';
+  const variation = state.variation * baseR;
+  const N = state.slots.length;
+  const lines = basisLines();
+
+  // basis line rings
+  if (state.show.lines) {
+    for (const ln of lines) {
+      for (const sign of [-1, 1]) {
+        const r = baseR + sign * ln * variation;
+        ctx.strokeStyle = state.highlightLine === ln ? 'rgba(200,51,28,0.45)' : 'rgba(0,0,0,0.07)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // 0 line (base circle)
+  if (state.show.zero) {
+    ctx.strokeStyle = '#888';
+  } else {
+    ctx.strokeStyle = '#eee';
+  }
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.arc(cx, cy, baseR, 0, Math.PI * 2);
   ctx.stroke();
 
   // sector dividers
-  const N = state.slots.length;
-  ctx.strokeStyle = '#f0f0f0';
-  for (let i = 0; i < N; i++) {
-    const angle = -Math.PI / 2 + (i / N) * Math.PI * 2;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.cos(angle) * baseR * 1.4, cy + Math.sin(angle) * baseR * 1.4);
-    ctx.stroke();
+  if (state.show.sectors) {
+    ctx.strokeStyle = '#eee';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < N; i++) {
+      const angle = -Math.PI / 2 + (i / N) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(angle) * baseR * 1.4, cy + Math.sin(angle) * baseR * 1.4);
+      ctx.stroke();
+    }
   }
 
-  // sector char labels
+  // char labels
   ctx.fillStyle = '#999';
   ctx.font = '11px sans-serif';
   ctx.textAlign = 'center';
@@ -974,33 +1102,45 @@ function drawShape() {
     ctx.fillText(state.slots[i].char, cx + Math.cos(angle) * lr, cy + Math.sin(angle) * lr);
   }
 
-  // shape
-  const offsets = computeShape();
-  if (!offsets) {
+  if (!hasAny) {
     ctx.fillStyle = '#bbb';
     ctx.font = '11px sans-serif';
     ctx.fillText('録音すると形が現れます', cx, cy);
-    document.getElementById('exportSvg').disabled = true;
-    document.getElementById('status').textContent = '';
     return;
   }
 
-  const pts = buildPath(offsets);
-  ctx.strokeStyle = '#222';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  pts.forEach((p, i) => {
-    if (i === 0) ctx.moveTo(p.x, p.y);
-    else ctx.lineTo(p.x, p.y);
-  });
-  ctx.closePath();
-  ctx.stroke();
+  // raw waveform (sample-density polygon)
+  if (state.show.raw) {
+    ctx.strokeStyle = 'rgba(74,158,255,0.6)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    let started = false;
+    for (let s = 0; s < N; s++) {
+      const sec = sectors[s];
+      if (!sec) continue;
+      const src = sec.samples;
+      const len = src.length;
+      for (let i = 0; i < len; i++) {
+        const angle = -Math.PI / 2 + ((s + i / len) / N) * Math.PI * 2;
+        const r = baseR + src[i] * variation;
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+      }
+    }
+    if (started) { ctx.closePath(); ctx.stroke(); }
+  }
 
-  // optional: consonant/vowel boundary markers on the circle
+  // quantized (or raw if snap=off) shape — control-point-based sub-sampled rendering
+  drawShapeClosed(cx, cy, baseR, variation, sectors, N,
+    state.snapMode !== 'off' && state.show.quant ? '#222' : (state.show.raw ? null : '#222'),
+    1.2);
+
+  // consonant/vowel boundary markers
   if (state.showBoundaryOnCircle) {
     ctx.strokeStyle = '#5cb46f';
     ctx.lineWidth = 1.5;
-    for (let s = 0; s < state.slots.length; s++) {
+    for (let s = 0; s < N; s++) {
       const slot = state.slots[s];
       if (!slot.buffer) continue;
       const samples = slot.buffer.getChannelData(0);
@@ -1010,7 +1150,7 @@ function drawShape() {
       const onset = detectVowelOnset(trimmed, slot.buffer.sampleRate);
       if (onset === null) continue;
       const frac = onset / trimmed.length;
-      const angle = -Math.PI / 2 + ((s + frac) / state.slots.length) * Math.PI * 2;
+      const angle = -Math.PI / 2 + ((s + frac) / N) * Math.PI * 2;
       const r1 = baseR * 0.92;
       const r2 = baseR * 1.18;
       ctx.beginPath();
@@ -1019,33 +1159,309 @@ function drawShape() {
       ctx.stroke();
     }
   }
+}
 
-  document.getElementById('exportSvg').disabled = false;
-  const recordedCount = state.slots.filter(s => s.buffer).length;
-  document.getElementById('status').textContent = `録音済 ${recordedCount} / ${state.slots.length}`;
+// Draw the seal closed path using control-point + pixel sub-sampling. Uses
+// raw samples when snapMode='off', quantized control points otherwise.
+function drawShapeClosed(cx, cy, baseR, variation, sectors, N, color, lw) {
+  if (!color) return;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lw;
+  ctx.beginPath();
+  let started = false;
+  const circumPx = 2 * Math.PI * (baseR + variation);
+  const pxPerSector = circumPx / N;
+  const lines = basisLines();
+
+  for (let s = 0; s < N; s++) {
+    const sec = sectors[s];
+    if (!sec) continue;
+    const secStartAngle = -Math.PI / 2 + (s / N) * Math.PI * 2;
+    const secSpanAngle = (1 / N) * Math.PI * 2;
+    const sampleLen = sec.samples.length;
+    const plot = (idxFrac, val, first) => {
+      const angle = secStartAngle + idxFrac * secSpanAngle;
+      const r = baseR + val * variation;
+      const x = cx + Math.cos(angle) * r;
+      const y = cy + Math.sin(angle) * r;
+      if (first && !started) { ctx.moveTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
+    };
+
+    if (state.snapMode === 'off') {
+      // straight polyline through raw samples
+      for (let i = 0; i < sampleLen; i++) {
+        plot(i / Math.max(1, sampleLen - 1), sec.samples[i], i === 0 && !started);
+      }
+      continue;
+    }
+
+    const pts = buildControlPoints(sec.samples, lines);
+    if (!pts.length) continue;
+    plot(pts[0].idx / Math.max(1, sampleLen - 1), pts[0].val, true);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const aFrac = a.idx / Math.max(1, sampleLen - 1);
+      const bFrac = b.idx / Math.max(1, sampleLen - 1);
+      if (state.connect === 'step') {
+        plot(bFrac, a.val, false);
+        plot(bFrac, b.val, false);
+      } else {
+        const arcPx = Math.abs(bFrac - aFrac) * pxPerSector;
+        const radialPx = Math.abs(b.val - a.val) * variation;
+        const segLen = Math.sqrt(arcPx * arcPx + radialPx * radialPx);
+        const steps = Math.max(8, Math.ceil(segLen / 2));
+        for (let j = 1; j <= steps; j++) {
+          let t = j / steps;
+          if (state.connect === 'smooth') t = t * t * (3 - 2 * t);
+          const v = a.val * (1 - t) + b.val * t;
+          const fr = aFrac + (bFrac - aFrac) * (j / steps);
+          plot(fr, v, false);
+        }
+      }
+    }
+  }
+  if (started) { ctx.closePath(); ctx.stroke(); }
+}
+
+// ============================================================
+// Linear view
+// ============================================================
+const LIN_PAD = { L: 60, R: 40, T: 50, B: 50 };
+
+function clampLinView() {
+  if (state.linZoom < 1) state.linZoom = 1;
+  if (state.linZoom > 200) state.linZoom = 200;
+  const maxOff = 1 - 1 / state.linZoom;
+  if (state.linOffsetX < 0) state.linOffsetX = 0;
+  if (state.linOffsetX > maxOff) state.linOffsetX = maxOff;
+}
+
+function drawLinearView(W, H, sectors, hasAny) {
+  const padL = LIN_PAD.L, padR = LIN_PAD.R, padT = LIN_PAD.T, padB = LIN_PAD.B;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const cy = padT + innerH / 2;
+  const ampH = innerH / 2 * 0.94;
+  const N = state.slots.length;
+  const lines = basisLines();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(padL, padT - 2, innerW, innerH + 4);
+  ctx.clip();
+
+  const visibleSpan = 1 / state.linZoom;
+  const startFrac = state.linOffsetX;
+  function tlToPx(frac) { return padL + ((frac - startFrac) / visibleSpan) * innerW; }
+
+  if (state.show.lines) {
+    for (const ln of lines) {
+      const isHl = state.highlightLine === ln;
+      ctx.strokeStyle = isHl ? '#c8331c' : '#e8e8e8';
+      ctx.lineWidth = isHl ? 1.5 : 1;
+      for (const sign of [-1, 1]) {
+        const y = cy - sign * ln * ampH;
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(padL + innerW, y);
+        ctx.stroke();
+      }
+    }
+  }
+
+  if (state.show.zero) {
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padL, cy);
+    ctx.lineTo(padL + innerW, cy);
+    ctx.stroke();
+  }
+
+  for (let s = 0; s < N; s++) {
+    const sectorStartFrac = s / N;
+    const sectorEndFrac = (s + 1) / N;
+    const x0 = tlToPx(sectorStartFrac);
+    const x1 = tlToPx(sectorEndFrac);
+    if (s > 0 && state.show.sectors) {
+      ctx.strokeStyle = '#ddd';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(x0, padT);
+      ctx.lineTo(x0, padT + innerH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.fillStyle = '#999';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(state.slots[s].char, (x0 + x1) / 2, padT + innerH + 12);
+  }
+
+  if (hasAny) {
+    for (let s = 0; s < N; s++) {
+      const sec = sectors[s];
+      if (!sec) continue;
+      const sectorStartFrac = s / N;
+      const sectorWFrac = 1 / N;
+
+      if (state.show.raw) {
+        ctx.strokeStyle = 'rgba(74,158,255,0.55)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 0; i < sec.samples.length; i++) {
+          const frac = sectorStartFrac + (i / Math.max(1, sec.samples.length - 1)) * sectorWFrac;
+          const x = tlToPx(frac);
+          const y = cy - sec.samples[i] * ampH;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+
+      if (state.show.quant && state.snapMode !== 'off') {
+        const pts = buildControlPoints(sec.samples, lines);
+        drawLinearQuant(pts, sec.samples.length, sectorStartFrac, sectorWFrac, tlToPx, cy, ampH);
+      }
+    }
+  }
+
+  ctx.restore();
+
+  if (state.show.lines) {
+    for (const ln of lines) {
+      const isHl = state.highlightLine === ln;
+      for (const sign of [-1, 1]) {
+        const y = cy - sign * ln * ampH;
+        ctx.fillStyle = isHl ? '#c8331c' : '#bbb';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText((sign > 0 ? '+' : '−') + ln.toFixed(2), padL - 6, y);
+      }
+    }
+  }
+
+  if (state.linZoom !== 1 || state.linOffsetX !== 0) {
+    ctx.fillStyle = '#888';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`×${state.linZoom.toFixed(1)}  オフセット ${(state.linOffsetX * 100).toFixed(0)}%`, padL, 8);
+  }
+
+  if (!hasAny) {
+    ctx.fillStyle = '#bbb';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('録音すると波形が現れます', W / 2, H / 2);
+  }
+}
+
+function drawLinearQuant(pts, secSampleCount, secStartFrac, secWFrac, tlToPx, cy, ampH) {
+  if (!pts || pts.length === 0) return;
+  ctx.strokeStyle = '#c8331c';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  function plot(ptIdx, val, first) {
+    const frac = secStartFrac + (ptIdx / Math.max(1, secSampleCount - 1)) * secWFrac;
+    const x = tlToPx(frac);
+    const y = cy - val * ampH;
+    if (first) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  plot(pts[0].idx, pts[0].val, true);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    if (state.connect === 'step') {
+      plot(b.idx, a.val, false);
+      plot(b.idx, b.val, false);
+    } else {
+      const xa = tlToPx(secStartFrac + (a.idx / Math.max(1, secSampleCount - 1)) * secWFrac);
+      const xb = tlToPx(secStartFrac + (b.idx / Math.max(1, secSampleCount - 1)) * secWFrac);
+      const pxSpan = Math.abs(xb - xa);
+      const vSpan = Math.abs(b.val - a.val) * ampH;
+      const segLen = Math.sqrt(pxSpan * pxSpan + vSpan * vSpan);
+      const steps = Math.max(8, Math.ceil(segLen / 2));
+      for (let j = 1; j <= steps; j++) {
+        let t = j / steps;
+        if (state.connect === 'smooth') t = t * t * (3 - 2 * t);
+        const v = a.val * (1 - t) + b.val * t;
+        const idx = a.idx + (b.idx - a.idx) * (j / steps);
+        plot(idx, v, false);
+      }
+    }
+  }
+  ctx.stroke();
 }
 
 // ============================================================
 // SVG export
 // ============================================================
 document.getElementById('exportSvg').addEventListener('click', () => {
-  const offsets = computeShape();
-  if (!offsets) return;
+  const data = buildSectorOffsets();
+  if (!data || !data.sectors.some(s => s)) return;
+  const sectors = data.sectors;
   const size = 1000;
   const cx = size / 2, cy = size / 2;
   const baseR = size * 0.36;
   const variation = state.variation * baseR;
-  const N = offsets.length;
-  const pts = [];
-  for (let i = 0; i < N; i++) {
-    const t = i / N;
-    const angle = -Math.PI / 2 + t * Math.PI * 2;
-    const r = baseR + offsets[i] * variation;
-    pts.push([cx + Math.cos(angle) * r, cy + Math.sin(angle) * r]);
+  const N = state.slots.length;
+  const circumPx = 2 * Math.PI * (baseR + variation);
+  const pxPerSector = circumPx / N;
+  const lines = basisLines();
+
+  // Reuse the same control-point rendering math to emit SVG path commands
+  const points = [];
+  for (let s = 0; s < N; s++) {
+    const sec = sectors[s];
+    if (!sec) continue;
+    const secStartAngle = -Math.PI / 2 + (s / N) * Math.PI * 2;
+    const secSpanAngle = (1 / N) * Math.PI * 2;
+    const sampleLen = sec.samples.length;
+    const push = (idxFrac, val) => {
+      const angle = secStartAngle + idxFrac * secSpanAngle;
+      const r = baseR + val * variation;
+      points.push([cx + Math.cos(angle) * r, cy + Math.sin(angle) * r]);
+    };
+    if (state.snapMode === 'off') {
+      for (let i = 0; i < sampleLen; i++) {
+        push(i / Math.max(1, sampleLen - 1), sec.samples[i]);
+      }
+      continue;
+    }
+    const pts = buildControlPoints(sec.samples, lines);
+    if (!pts.length) continue;
+    push(pts[0].idx / Math.max(1, sampleLen - 1), pts[0].val);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const aFrac = a.idx / Math.max(1, sampleLen - 1);
+      const bFrac = b.idx / Math.max(1, sampleLen - 1);
+      if (state.connect === 'step') {
+        push(bFrac, a.val);
+        push(bFrac, b.val);
+      } else {
+        const arcPx = Math.abs(bFrac - aFrac) * pxPerSector;
+        const radialPx = Math.abs(b.val - a.val) * variation;
+        const segLen = Math.sqrt(arcPx * arcPx + radialPx * radialPx);
+        const steps = Math.max(8, Math.ceil(segLen / 2));
+        for (let j = 1; j <= steps; j++) {
+          let t = j / steps;
+          if (state.connect === 'smooth') t = t * t * (3 - 2 * t);
+          const v = a.val * (1 - t) + b.val * t;
+          const fr = aFrac + (bFrac - aFrac) * (j / steps);
+          push(fr, v);
+        }
+      }
+    }
   }
-  let d = `M ${pts[0][0].toFixed(2)} ${pts[0][1].toFixed(2)}`;
-  for (let i = 1; i < pts.length; i++) {
-    d += ` L ${pts[i][0].toFixed(2)} ${pts[i][1].toFixed(2)}`;
+  if (points.length === 0) return;
+  let d = `M ${points[0][0].toFixed(2)} ${points[0][1].toFixed(2)}`;
+  for (let i = 1; i < points.length; i++) {
+    d += ` L ${points[i][0].toFixed(2)} ${points[i][1].toFixed(2)}`;
   }
   d += ' Z';
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
@@ -1511,6 +1927,7 @@ document.getElementById('zoomOut').addEventListener('click', () => { view.zoom /
 document.getElementById('zoomReset').addEventListener('click', () => { view.zoom = 1; view.offset = 0; renderLarge(); });
 document.getElementById('toggleEnv').addEventListener('change', renderLarge);
 document.getElementById('toggleVowel').addEventListener('change', renderLarge);
+document.getElementById('toggleQuantModal').addEventListener('change', renderLarge);
 document.getElementById('trimReset').addEventListener('click', () => {
   const slot = state.slots[view.slotIndex];
   if (!slot) return;
@@ -1538,6 +1955,7 @@ window.addEventListener('resize', () => {
 function drawLargeWaveform(lctx, W, H, samples, env, onsetIdx, zoom = 1, offset = 0) {
   const showEnv = document.getElementById('toggleEnv')?.checked;
   const showVowel = document.getElementById('toggleVowel')?.checked;
+  const showQuant = document.getElementById('toggleQuantModal')?.checked;
   lctx.fillStyle = '#000';
   lctx.fillRect(0, 0, W, H);
 
@@ -1627,6 +2045,53 @@ function drawLargeWaveform(lctx, W, H, samples, env, onsetIdx, zoom = 1, offset 
   }
   }
 
+  // quantized overlay (use trimmed audio of the visible slot, resampled to inputRes,
+  // then control-point-based smoothstep at pixel resolution within trim range)
+  if (showQuant && state.snapMode !== 'off' && view.trimEnd > view.trimStart) {
+    const trimStartX = ((view.trimStart - startSampleF) / visibleSamples) * W;
+    const trimEndX = ((view.trimEnd - startSampleF) / visibleSamples) * W;
+    if (trimEndX > 0 && trimStartX < W) {
+      const trimmed = samples.slice(view.trimStart, view.trimEnd);
+      const sectorRes = Math.floor(state.resolution / Math.max(1, state.slots.length));
+      const resampled = resample(trimmed, sectorRes);
+      // per-sector normalization for visual parity with the main view
+      let peak = 0;
+      for (let i = 0; i < resampled.length; i++) { const a = Math.abs(resampled[i]); if (a > peak) peak = a; }
+      const normalized = peak > 0 ? resampled.map(v => v / peak) : resampled;
+      const lines = basisLines();
+      const pts = buildControlPoints(Float32Array.from(normalized), lines);
+      if (pts.length > 0) {
+        const xStart = trimStartX, xEnd = trimEndX;
+        const pxSpan = xEnd - xStart;
+        const sampleLen = resampled.length;
+        const valToY = v => H / 2 - v * (H / 2) * 0.92;
+        const idxToX = idx => xStart + (idx / Math.max(1, sampleLen - 1)) * pxSpan;
+        lctx.strokeStyle = '#ff5cff';
+        lctx.lineWidth = 1.5;
+        lctx.beginPath();
+        lctx.moveTo(idxToX(pts[0].idx), valToY(pts[0].val));
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = pts[i], b = pts[i + 1];
+          if (state.connect === 'step') {
+            lctx.lineTo(idxToX(b.idx), valToY(a.val));
+            lctx.lineTo(idxToX(b.idx), valToY(b.val));
+          } else {
+            const xa = idxToX(a.idx), xb = idxToX(b.idx);
+            const span = Math.max(8, Math.ceil(Math.abs(xb - xa) / 2));
+            for (let j = 1; j <= span; j++) {
+              let t = j / span;
+              if (state.connect === 'smooth') t = t * t * (3 - 2 * t);
+              const v = a.val * (1 - t) + b.val * t;
+              const idx = a.idx + (b.idx - a.idx) * (j / span);
+              lctx.lineTo(idxToX(idx), valToY(v));
+            }
+          }
+        }
+        lctx.stroke();
+      }
+    }
+  }
+
   // vowel onset line (mapped through view)
   if (showVowel && onsetIdx !== null) {
     const xFrac = (onsetIdx - startSampleF) / visibleSamples;
@@ -1707,6 +2172,85 @@ function drawLargeWaveform(lctx, W, H, samples, env, onsetIdx, zoom = 1, offset 
   lctx.fillStyle = '#666';
   lctx.fillRect(offset * W, H - sbH, W / zoom, sbH);
 }
+
+// ============================================================
+// Linear view interactions (wheel/drag/click on the MAIN canvas
+// when state.view === 'linear')
+// ============================================================
+let linDrag = null;
+const LIN_DRAG_THRESHOLD = 4;
+
+canvas.addEventListener('mousedown', e => {
+  if (state.view !== 'linear') return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const W = canvas.clientWidth;
+  const innerW = W - LIN_PAD.L - LIN_PAD.R;
+  if (x < LIN_PAD.L || x > LIN_PAD.L + innerW) return;
+  linDrag = { startX: e.clientX, startOffset: state.linOffsetX, innerW, moved: false, downX: x, downY: e.clientY - rect.top };
+});
+window.addEventListener('mousemove', e => {
+  if (!linDrag) return;
+  const dx = e.clientX - linDrag.startX;
+  if (!linDrag.moved && Math.abs(dx) > LIN_DRAG_THRESHOLD) {
+    linDrag.moved = true;
+    canvas.style.cursor = 'grabbing';
+  }
+  if (linDrag.moved) {
+    state.linOffsetX = linDrag.startOffset - (dx / linDrag.innerW) / state.linZoom;
+    clampLinView();
+    drawShape();
+  }
+});
+window.addEventListener('mouseup', e => {
+  if (!linDrag) return;
+  if (!linDrag.moved && state.show.lines) {
+    const H = canvas.clientHeight;
+    const innerH = H - LIN_PAD.T - LIN_PAD.B;
+    const cy = LIN_PAD.T + innerH / 2;
+    const ampH = innerH / 2 * 0.94;
+    const y = linDrag.downY;
+    const lines = basisLines();
+    let best = null, bestDist = 6;
+    for (const ln of lines) {
+      for (const sign of [-1, 1]) {
+        const ly = cy - sign * ln * ampH;
+        const d = Math.abs(y - ly);
+        if (d < bestDist) { bestDist = d; best = ln; }
+      }
+    }
+    state.highlightLine = (state.highlightLine === best ? null : best);
+    drawShape();
+  }
+  canvas.style.cursor = '';
+  linDrag = null;
+});
+
+canvas.addEventListener('wheel', e => {
+  if (state.view !== 'linear') return;
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const W = canvas.clientWidth;
+  const innerW = W - LIN_PAD.L - LIN_PAD.R;
+  if (x < LIN_PAD.L || x > LIN_PAD.L + innerW) return;
+  const mouseInner = (x - LIN_PAD.L) / innerW;
+  const sampleFracBefore = state.linOffsetX + mouseInner / state.linZoom;
+  const factor = Math.exp(-e.deltaY * 0.002);
+  state.linZoom *= factor;
+  if (state.linZoom < 1) state.linZoom = 1;
+  if (state.linZoom > 200) state.linZoom = 200;
+  state.linOffsetX = sampleFracBefore - mouseInner / state.linZoom;
+  clampLinView();
+  drawShape();
+}, { passive: false });
+
+canvas.addEventListener('dblclick', () => {
+  if (state.view !== 'linear') return;
+  state.linZoom = 1;
+  state.linOffsetX = 0;
+  drawShape();
+});
 
 // ============================================================
 // Update orchestrator
