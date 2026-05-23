@@ -228,6 +228,33 @@
     aspect-ratio: 1;
     position: relative;
   }
+  .view-controls {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: rgba(255,255,255,0.92);
+    padding: 4px;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    border: 1px solid #e5e5e5;
+  }
+  .view-controls button {
+    width: 32px;
+    height: 32px;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    color: #444;
+    font-family: inherit;
+    padding: 0;
+  }
+  .view-controls button:hover { background: #f0f0f0; border-color: #aaa; }
   #canvas {
     width: 100%;
     height: 100%;
@@ -359,6 +386,11 @@
     <div class="canvas-wrap">
       <canvas id="canvas"></canvas>
       <div class="status" id="status"></div>
+      <div class="view-controls">
+        <button id="zoomInBtn" title="拡大">+</button>
+        <button id="zoomOutBtn" title="縮小">−</button>
+        <button id="resetView" title="実寸（×1）に戻す">⊙</button>
+      </div>
     </div>
   </main>
 
@@ -401,6 +433,12 @@
       <label><span>本数（片側）</span><span class="val" id="lineCountVal">5</span></label>
       <input type="range" id="lineCount" min="1" max="20" value="5">
     </div>
+    <div class="control">
+      <label><span>log圧縮強度 k</span><span class="val" id="logKVal">5</span></label>
+      <input type="range" id="logK" min="0.1" max="50" step="0.1" value="5">
+      <div class="hint">対数モード時のみ有効。大きいほど大きな値が高い線へ強く集約される</div>
+      <div id="lineInfo" style="margin-top:6px; font-size:10px; color:#666; line-height:1.5; font-family:monospace;"></div>
+    </div>
 
     <h2>正規化</h2>
     <div class="toggle" id="normToggle">
@@ -411,6 +449,7 @@
 
     <h2>解像度</h2>
     <div class="toggle" id="resolutionToggle">
+      <button data-val="256">256</button>
       <button data-val="512" class="active">512</button>
       <button data-val="1024">1024</button>
     </div>
@@ -422,23 +461,14 @@
     </div>
 
     <div class="control" style="margin-top: 20px;">
-      <label><span>変動量</span><span class="val" id="variationVal">30%</span></label>
-      <input type="range" id="variation" min="0" max="100" value="30">
+      <label><span>最大振幅（mm）</span><span class="val" id="variationVal">2.00 mm</span></label>
+      <input type="range" id="variation" min="0.1" max="5" step="0.05" value="2.0">
+      <div class="hint">印面 10.5mm に対する波形の外径振幅（±方向）</div>
     </div>
 
     <div class="control">
       <label><span>フェード幅</span><span class="val" id="fadeVal">8%</span></label>
       <input type="range" id="fade" min="0" max="30" value="8">
-    </div>
-
-    <div class="control">
-      <label><span>トリミング感度</span><span class="val" id="trimRatioVal">18%</span></label>
-      <input type="range" id="trimRatio" min="1" max="50" value="18">
-    </div>
-
-    <div class="control">
-      <label><span>トリミング余白</span><span class="val" id="trimMarginVal">5 ms</span></label>
-      <input type="range" id="trimMargin" min="0" max="50" value="5">
     </div>
   </aside>
 </div>
@@ -479,30 +509,41 @@
 // ============================================================
 // State
 // ============================================================
+// Physical scale: target seal diameter is 10.5mm (Japanese 認印 standard).
+// We approximate screen mm using CSS pixel conversion (96 DPI assumption).
+const MM_TO_PX = 96 / 25.4; // ≈ 3.78 px per mm
+const SEAL_DIAMETER_MM = 10.5;
+const SEAL_RADIUS_MM = SEAL_DIAMETER_MM / 2;
+
 const state = {
   name: '',
   slots: [],
   resolution: 512,
   boundary: 'sharp',    // 'fade' | 'sharp'
-  variation: 0.30,
+  variationMm: 2.0,     // max amplitude in millimeters (outward + inward)
   fadePct: 0.08,
   trimRatio: 0.18,
   trimMargin: 5,
   // Quantization (merged from quantize_demo)
-  snapMode: 'A',        // 'off' | 'A' | 'B'
+  snapMode: 'B',        // 'off' | 'A' | 'B'
   connect: 'smooth',    // 'step' | 'linear' | 'smooth'
-  spacing: 'equal',     // 'equal' | 'log'
+  spacing: 'log',       // 'equal' | 'log'
+  logK: 5,              // log compression strength (used when spacing='log')
   lineCount: 5,
   norm: 'per-sector',   // 'per-sector' | 'global'
   // View / display
   view: 'circle',       // 'linear' | 'circle'
-  show: { raw: false, quant: true, lines: false, zero: false, sectors: true },
+  show: { raw: true, quant: true, lines: false, zero: false, sectors: true },
   showBoundaryOnCircle: true,
   showQuantInModal: true,
   // Linear view interaction
   linZoom: 1,
   linOffsetX: 0,
   highlightLine: null,
+  // Circle view zoom/pan
+  circleZoom: 1,        // 1× = actual physical size (10.5mm)
+  circleOffsetX: 0,
+  circleOffsetY: 0,
 };
 
 let audioCtx = null;
@@ -763,10 +804,29 @@ function setupSlider(id, key, scale, suffix, valId) {
     updateAll();
   });
 }
-setupSlider('variation', 'variation', 0.01, '%', 'variationVal');
+// Variation needs decimal precision (in mm) so set up manually
+(() => {
+  const slider = document.getElementById('variation');
+  const valEl = document.getElementById('variationVal');
+  slider.addEventListener('input', () => {
+    const raw = parseFloat(slider.value);
+    state.variationMm = raw;
+    valEl.textContent = raw.toFixed(2) + ' mm';
+    updateAll();
+  });
+})();
+// logK also needs decimal display
+(() => {
+  const slider = document.getElementById('logK');
+  const valEl = document.getElementById('logKVal');
+  slider.addEventListener('input', () => {
+    const raw = parseFloat(slider.value);
+    state.logK = raw;
+    valEl.textContent = raw < 10 ? raw.toFixed(1) : Math.round(raw).toString();
+    updateAll();
+  });
+})();
 setupSlider('fade', 'fadePct', 0.01, '%', 'fadeVal');
-setupSlider('trimRatio', 'trimRatio', 0.01, '%', 'trimRatioVal');
-setupSlider('trimMargin', 'trimMargin', 1, ' ms', 'trimMarginVal');
 setupSlider('lineCount', 'lineCount', 1, '', 'lineCountVal');
 
 // Show/hide checkboxes
@@ -798,9 +858,6 @@ function refreshTrimInModal() {
   updateModalInfo();
   renderLarge();
 }
-['trimRatio', 'trimMargin'].forEach(id => {
-  document.getElementById(id).addEventListener('input', refreshTrimInModal);
-});
 
 // ============================================================
 // Shape computation — produces per-sector normalized sample arrays.
@@ -849,25 +906,37 @@ function buildSectorOffsets() {
 // ============================================================
 // Quantization (basis lines, snap, control points)
 // ============================================================
+// Basis lines are always equally-spaced visually. The "log" spacing mode only
+// changes how snap distance is measured (perceptual log distance), not the line
+// positions on screen.
 function basisLines() {
   const n = state.lineCount;
   const lines = [];
-  if (state.spacing === 'equal') {
-    for (let i = 1; i <= n; i++) lines.push(i / n);
-  } else {
-    const k = 2.5;
-    for (let i = 1; i <= n; i++) {
-      lines.push((Math.exp(k * i / n) - 1) / (Math.exp(k) - 1));
-    }
-  }
+  for (let i = 1; i <= n; i++) lines.push(i / n);
   return lines;
+}
+
+// Map value v in [0,1] to visual coord in [0,1] via log curve.
+// k controls compression strength (k→0 ≈ linear, k=large ≈ heavily compressed).
+function logWarp(v, k) {
+  return Math.log1p(v * k) / Math.log1p(k);
+}
+// Inverse: visual coord p in [0,1] → input value v in [0,1]
+function logWarpInv(p, k) {
+  return (Math.exp(p * Math.log1p(k)) - 1) / k;
 }
 
 function snapValue(v, lines) {
   const a = Math.abs(v);
-  let best = 0, bestDist = a;
+  const useLog = state.spacing === 'log';
+  const k = state.logK;
+  // In log mode, project value and lines into warped space then snap by min distance
+  const aProj = useLog ? logWarp(a, k) : a;
+  let best = 0;
+  let bestDist = aProj; // distance to 0
   for (const line of lines) {
-    const d = Math.abs(a - line);
+    const lineProj = useLog ? logWarp(line, k) : line;
+    const d = Math.abs(aProj - lineProj);
     if (d < bestDist) { bestDist = d; best = line; }
   }
   return v >= 0 ? best : -best;
@@ -1047,13 +1116,15 @@ function drawShape() {
 }
 
 function drawCircleView(W, H, sectors, hasAny) {
-  const cx = W / 2, cy = H / 2;
-  const baseR = Math.min(W, H) * 0.36;
-  const variation = state.variation * baseR;
+  const z = state.circleZoom;
+  const cx = W / 2 + state.circleOffsetX, cy = H / 2 + state.circleOffsetY;
+  // Render at actual physical size scaled by zoom.
+  const baseR = SEAL_RADIUS_MM * MM_TO_PX * z;
+  const variation = state.variationMm * MM_TO_PX * z;
   const N = state.slots.length;
   const lines = basisLines();
 
-  // basis line rings
+  // basis line rings (labels moved to right panel — see updateLineInfo)
   if (state.show.lines) {
     for (const ln of lines) {
       for (const sign of [-1, 1]) {
@@ -1101,6 +1172,25 @@ function drawCircleView(W, H, sectors, hasAny) {
     const lr = baseR * 1.52;
     ctx.fillText(state.slots[i].char, cx + Math.cos(angle) * lr, cy + Math.sin(angle) * lr);
   }
+
+  // Physical-scale indicator: a 10mm reference bar in the top-left.
+  ctx.save();
+  const barLen = 10 * MM_TO_PX * z;
+  const barX = 16, barY = 24;
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(barX, barY);
+  ctx.lineTo(barX + barLen, barY);
+  ctx.moveTo(barX, barY - 3); ctx.lineTo(barX, barY + 3);
+  ctx.moveTo(barX + barLen, barY - 3); ctx.lineTo(barX + barLen, barY + 3);
+  ctx.stroke();
+  ctx.fillStyle = '#666';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`10mm  印面 ${SEAL_DIAMETER_MM}mm  ×${z.toFixed(1)}`, barX + barLen + 6, barY);
+  ctx.restore();
 
   if (!hasAny) {
     ctx.fillStyle = '#bbb';
@@ -1405,12 +1495,15 @@ document.getElementById('exportSvg').addEventListener('click', () => {
   const data = buildSectorOffsets();
   if (!data || !data.sectors.some(s => s)) return;
   const sectors = data.sectors;
-  const size = 1000;
-  const cx = size / 2, cy = size / 2;
-  const baseR = size * 0.36;
-  const variation = state.variation * baseR;
+  // SVG in mm units so it imports at correct physical size in CAD/3D tools
+  const padMm = 2;
+  const sizeMm = (SEAL_DIAMETER_MM + state.variationMm * 2 + padMm * 2);
+  const cx = sizeMm / 2, cy = sizeMm / 2;
+  const baseR = SEAL_RADIUS_MM;
+  const variation = state.variationMm;
   const N = state.slots.length;
-  const circumPx = 2 * Math.PI * (baseR + variation);
+  // For sub-step density in SVG, use a fixed "pixel" scale (assume 100px/mm equivalent)
+  const circumPx = 2 * Math.PI * (baseR + variation) * 100;
   const pxPerSector = circumPx / N;
   const lines = basisLines();
 
@@ -1459,14 +1552,15 @@ document.getElementById('exportSvg').addEventListener('click', () => {
     }
   }
   if (points.length === 0) return;
-  let d = `M ${points[0][0].toFixed(2)} ${points[0][1].toFixed(2)}`;
+  let d = `M ${points[0][0].toFixed(3)} ${points[0][1].toFixed(3)}`;
   for (let i = 1; i < points.length; i++) {
-    d += ` L ${points[i][0].toFixed(2)} ${points[i][1].toFixed(2)}`;
+    d += ` L ${points[i][0].toFixed(3)} ${points[i][1].toFixed(3)}`;
   }
   d += ' Z';
+  // viewBox in mm, width/height attributes also in mm so importers respect physical size
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
-  <path d="${d}" fill="none" stroke="#000" stroke-width="1.5"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${sizeMm} ${sizeMm}" width="${sizeMm}mm" height="${sizeMm}mm">
+  <path d="${d}" fill="none" stroke="#000" stroke-width="0.05"/>
 </svg>`;
   const blob = new Blob([svg], { type: 'image/svg+xml' });
   const url = URL.createObjectURL(blob);
@@ -2246,22 +2340,149 @@ canvas.addEventListener('wheel', e => {
 }, { passive: false });
 
 canvas.addEventListener('dblclick', () => {
-  if (state.view !== 'linear') return;
-  state.linZoom = 1;
-  state.linOffsetX = 0;
+  if (state.view === 'linear') {
+    state.linZoom = 1;
+    state.linOffsetX = 0;
+    drawShape();
+  } else {
+    state.circleZoom = 4;
+    state.circleOffsetX = 0;
+    state.circleOffsetY = 0;
+    drawShape();
+  }
+});
+
+// Circle view: wheel zoom (cursor-centered) + drag pan
+let circleDrag = null;
+canvas.addEventListener('mousedown', e => {
+  if (state.view !== 'circle') return;
+  circleDrag = { startX: e.clientX, startY: e.clientY, ox: state.circleOffsetX, oy: state.circleOffsetY };
+});
+window.addEventListener('mousemove', e => {
+  if (!circleDrag) return;
+  state.circleOffsetX = circleDrag.ox + (e.clientX - circleDrag.startX);
+  state.circleOffsetY = circleDrag.oy + (e.clientY - circleDrag.startY);
+  canvas.style.cursor = 'grabbing';
   drawShape();
 });
+window.addEventListener('mouseup', () => {
+  if (circleDrag) { circleDrag = null; canvas.style.cursor = ''; }
+});
+
+canvas.addEventListener('wheel', e => {
+  if (state.view !== 'circle') return;
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  const cxBefore = W / 2 + state.circleOffsetX;
+  const cyBefore = H / 2 + state.circleOffsetY;
+  const factor = Math.exp(-e.deltaY * 0.002);
+  const newZoom = Math.min(40, Math.max(0.5, state.circleZoom * factor));
+  // Keep the point under the cursor anchored
+  const ratio = newZoom / state.circleZoom;
+  state.circleOffsetX = mx - (mx - cxBefore) * ratio - W / 2;
+  state.circleOffsetY = my - (my - cyBefore) * ratio - H / 2;
+  state.circleZoom = newZoom;
+  drawShape();
+}, { passive: false });
 
 // ============================================================
 // Update orchestrator
 // ============================================================
 function updateAll() {
   drawShape();
+  updateLineInfo();
 }
+
+// Show each basis line's input range (in mm) for the current k/spacing.
+// In log mode the zones differ; in equal mode they are uniform.
+function updateLineInfo() {
+  const el = document.getElementById('lineInfo');
+  if (!el) return;
+  const lines = basisLines();
+  const k = state.logK;
+  const useLog = state.spacing === 'log';
+  // Each line owns the input range from prev midpoint to next midpoint
+  // (visual midpoints, converted back to input via logWarpInv when in log mode)
+  const rows = [];
+  for (let i = 0; i < lines.length; i++) {
+    const prev = i === 0 ? 0 : lines[i - 1];
+    const next = i === lines.length - 1 ? 1 : lines[i + 1];
+    const visLow = (prev + lines[i]) / 2;
+    const visHi = (lines[i] + next) / 2;
+    const inLow = useLog ? logWarpInv(visLow, k) : visLow;
+    const inHi = useLog ? logWarpInv(visHi, k) : visHi;
+    const mmLow = inLow * state.variationMm;
+    const mmHi = inHi * state.variationMm;
+    const lineMm = lines[i] * state.variationMm;
+    rows.push(`線${i + 1} ${lineMm.toFixed(2)}mm: 入力${mmLow.toFixed(2)}〜${mmHi.toFixed(2)}mm`);
+  }
+  el.innerHTML = rows.join('<br>');
+}
+
+// Reset only the view to actual physical size (×1).
+function resetView() {
+  state.linZoom = 1;
+  state.linOffsetX = 0;
+  state.circleZoom = 1;
+  state.circleOffsetX = 0;
+  state.circleOffsetY = 0;
+  state.highlightLine = null;
+  updateAll();
+}
+
+function zoomCircle(factor) {
+  const newZoom = Math.min(40, Math.max(0.5, state.circleZoom * factor));
+  state.circleZoom = newZoom;
+  updateAll();
+}
+
+function syncUIFromState() {
+  // Toggles
+  const setActive = (groupId, val) => {
+    document.querySelectorAll(`#${groupId} button`).forEach(b => {
+      b.classList.toggle('active', b.dataset.val === String(val));
+    });
+  };
+  setActive('resolutionToggle', state.resolution);
+  setActive('boundaryToggle', state.boundary);
+  setActive('viewToggle', state.view);
+  setActive('snapModeToggle', state.snapMode);
+  setActive('connectToggle', state.connect);
+  setActive('spacingToggle', state.spacing);
+  setActive('normToggle', state.norm);
+
+  // Sliders
+  document.getElementById('variation').value = state.variationMm;
+  document.getElementById('variationVal').textContent = state.variationMm.toFixed(2) + ' mm';
+  document.getElementById('logK').value = state.logK;
+  document.getElementById('logKVal').textContent = state.logK < 10 ? state.logK.toFixed(1) : Math.round(state.logK).toString();
+  document.getElementById('lineCount').value = state.lineCount;
+  document.getElementById('lineCountVal').textContent = String(state.lineCount);
+  document.getElementById('fade').value = Math.round(state.fadePct * 100);
+  document.getElementById('fadeVal').textContent = Math.round(state.fadePct * 100) + '%';
+
+  // Checkboxes
+  ['raw', 'quant', 'lines', 'zero', 'sectors'].forEach(key => {
+    const el = document.getElementById('show' + key.charAt(0).toUpperCase() + key.slice(1));
+    if (el) el.checked = state.show[key];
+  });
+  document.getElementById('showBoundaryOnCircle').checked = state.showBoundaryOnCircle;
+}
+
+document.getElementById('resetView').addEventListener('click', resetView);
+document.getElementById('zoomInBtn').addEventListener('click', () => zoomCircle(1.5));
+document.getElementById('zoomOutBtn').addEventListener('click', () => zoomCircle(1 / 1.5));
+
+// Sync UI to initial state (toggles, sliders, checkboxes)
+syncUIFromState();
 
 // Init
 resizeCanvas();
 drawShape();
+updateLineInfo();
 </script>
 </body>
 </html>
