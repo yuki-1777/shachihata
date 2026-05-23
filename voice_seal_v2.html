@@ -1,0 +1,1723 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>聲印 v2 — 形状生成ツール</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Helvetica Neue", sans-serif;
+    background: #fafafa;
+    color: #222;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 320px 1fr 280px;
+    height: 100vh;
+  }
+  aside {
+    padding: 20px;
+    background: #fff;
+    border-right: 1px solid #e5e5e5;
+    overflow-y: auto;
+  }
+  aside.right {
+    border-right: none;
+    border-left: 1px solid #e5e5e5;
+  }
+  main {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fafafa;
+    position: relative;
+  }
+  h1 {
+    font-size: 16px;
+    margin: 0 0 4px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .tag {
+    font-size: 10px;
+    color: #888;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+  h2 {
+    font-size: 11px;
+    margin: 20px 0 8px;
+    font-weight: 600;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .slots {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .slot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    background: #f5f5f5;
+    border-radius: 3px;
+    border: 1px solid #e5e5e5;
+  }
+  .slot.recording {
+    background: #fff1ee;
+    border-color: #c8331c;
+  }
+  .slot.has-data {
+    background: #f0f7f0;
+    border-color: #d0e5d0;
+  }
+  .slot-char {
+    font-size: 16px;
+    font-weight: 600;
+    width: 28px;
+    text-align: center;
+  }
+  .slot-btn {
+    flex: 1;
+    padding: 6px 8px;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+    user-select: none;
+    text-align: center;
+    transition: background 0.1s;
+  }
+  .slot-btn:hover { background: #f0f0f0; }
+  .slot-btn:active, .slot.recording .slot-btn { background: #c8331c; color: white; border-color: #c8331c; }
+  .slot-clear {
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    padding: 4px 6px;
+    font-size: 14px;
+  }
+  .slot-clear:hover { color: #c8331c; }
+  .mini-wrap {
+    flex: 1;
+    position: relative;
+    height: 40px;
+    background: #000;
+    border-radius: 3px;
+    cursor: pointer;
+    overflow: hidden;
+    border: 1px solid #2a2a2a;
+  }
+  .mini-wrap:hover { border-color: #c8331c; }
+  .mini-wrap:hover .mini-hint { opacity: 1; }
+  .mini-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .mini-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(200, 51, 28, 0.85);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+  }
+  .slot-rerec {
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    padding: 4px 8px;
+    font-size: 10px;
+    cursor: pointer;
+    color: #555;
+    user-select: none;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  .slot-rerec:hover { background: #f0f0f0; }
+  .slot-rerec:active, .slot.recording .slot-rerec { background: #c8331c; color: white; border-color: #c8331c; }
+  .control {
+    margin-bottom: 14px;
+  }
+  .control label {
+    display: block;
+    font-size: 11px;
+    color: #666;
+    margin-bottom: 4px;
+  }
+  .control .val {
+    float: right;
+    color: #c8331c;
+    font-weight: 600;
+  }
+  input[type="range"] {
+    width: 100%;
+  }
+  .toggle {
+    display: flex;
+    gap: 4px;
+    background: #f0f0f0;
+    padding: 2px;
+    border-radius: 4px;
+  }
+  .toggle button {
+    flex: 1;
+    background: none;
+    border: none;
+    padding: 5px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 3px;
+    color: #555;
+    font-family: inherit;
+  }
+  .toggle button.active {
+    background: #fff;
+    color: #222;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    font-weight: 600;
+  }
+  .export-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 12px;
+  }
+  .btn {
+    width: 100%;
+    padding: 8px;
+    background: #222;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+  }
+  .btn:hover { background: #000; }
+  .btn:disabled { background: #ccc; cursor: not-allowed; }
+  .canvas-wrap {
+    width: min(80vmin, 600px);
+    aspect-ratio: 1;
+    position: relative;
+  }
+  #canvas {
+    width: 100%;
+    height: 100%;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+  }
+  .status {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: #888;
+  }
+  .hint {
+    font-size: 10px;
+    color: #999;
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+  kbd {
+    display: inline-block;
+    background: #eee;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-family: inherit;
+  }
+  .slot-char {
+    cursor: pointer;
+  }
+  .slot-char:hover { color: #c8331c; }
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-backdrop.show { display: flex; }
+  .modal {
+    background: #111;
+    padding: 24px;
+    border-radius: 8px;
+    width: min(90vw, 1200px);
+    color: #eee;
+  }
+  .modal-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .modal-title { font-size: 14px; font-weight: 600; }
+  .modal-title b { font-size: 20px; margin-right: 8px; }
+  .modal-close {
+    background: none;
+    border: 1px solid #555;
+    color: #ccc;
+    padding: 4px 10px;
+    cursor: pointer;
+    border-radius: 3px;
+    font-family: inherit;
+  }
+  #largeCanvas {
+    width: 100%;
+    height: 380px;
+    background: #000;
+    border-radius: 4px;
+    cursor: grab;
+    user-select: none;
+  }
+  #largeCanvas.grabbing { cursor: grabbing; }
+  .modal-tools {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 10px;
+    font-size: 11px;
+    color: #aaa;
+  }
+  .modal-tools button {
+    background: #222;
+    border: 1px solid #444;
+    color: #ddd;
+    padding: 4px 10px;
+    cursor: pointer;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 11px;
+  }
+  .modal-tools button:hover { background: #333; }
+  .modal-tools .spacer { flex: 1; }
+  .modal-legend {
+    font-size: 11px;
+    color: #888;
+    margin-top: 10px;
+    line-height: 1.6;
+  }
+  .modal-legend .raw { color: #4a9eff; }
+  .modal-legend .vowel { color: #5cff8a; }
+  .modal-legend .info { color: #ffd24a; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <h1>聲印</h1>
+    <div class="tag">SEI-IN v2</div>
+
+    <h2>名前</h2>
+    <input type="text" id="nameInput" maxlength="5" placeholder="ひらがな 1〜5文字" value="">
+    <div class="hint">入力すると下に録音スロットが現れます</div>
+
+    <h2>録音</h2>
+    <div class="slots" id="slots"></div>
+    <div class="hint">各スロットのボタンを<b>押している間だけ</b>録音されます（<kbd>1</kbd>〜<kbd>5</kbd>キーでも可）</div>
+
+    <h2>出力</h2>
+    <div class="export-row">
+      <button class="btn" id="exportSvg" disabled>SVG ダウンロード</button>
+    </div>
+  </aside>
+
+  <main>
+    <div class="canvas-wrap">
+      <canvas id="canvas"></canvas>
+      <div class="status" id="status"></div>
+    </div>
+  </main>
+
+  <aside class="right">
+    <h2>解像度</h2>
+    <div class="toggle" id="resolutionToggle">
+      <button data-val="512" class="active">512</button>
+      <button data-val="1024">1024</button>
+    </div>
+    <div class="hint">セクタごとの描画点数（高いほど波形の細部が見える）</div>
+
+    <h2>オフセット方向</h2>
+    <div class="toggle" id="directionToggle">
+      <button data-val="outward" class="active">外向きのみ</button>
+      <button data-val="both">両側</button>
+    </div>
+
+    <h2>境界処理</h2>
+    <div class="toggle" id="boundaryToggle">
+      <button data-val="fade" class="active">フェード</button>
+      <button data-val="sharp">シャープ</button>
+    </div>
+
+    <h2>円上の補助表示</h2>
+    <label style="font-size:11px; color:#555; display:block; margin-top:4px;">
+      <input type="checkbox" id="showBoundaryOnCircle" checked> 子音/母音の境界を表示
+    </label>
+
+    <div class="control" style="margin-top: 20px;">
+      <label><span>変動量</span><span class="val" id="variationVal">30%</span></label>
+      <input type="range" id="variation" min="0" max="100" value="30">
+    </div>
+
+    <div class="control">
+      <label><span>スムージング</span><span class="val" id="smoothVal">2</span></label>
+      <input type="range" id="smooth" min="0" max="10" value="2">
+      <div class="hint">周方向の平均化回数（0=生波形、大=なめらか）</div>
+    </div>
+
+    <div class="control">
+      <label><span>フェード幅</span><span class="val" id="fadeVal">8%</span></label>
+      <input type="range" id="fade" min="0" max="30" value="8">
+      <div class="hint">境界処理がフェード時、両端をベース半径に補間する範囲</div>
+    </div>
+
+    <div class="control">
+      <label><span>トリミング感度</span><span class="val" id="trimRatioVal">18%</span></label>
+      <input type="range" id="trimRatio" min="1" max="50" value="18">
+      <div class="hint">ピークRMSの何%以下を無音とみなすか（大きい=きつく削る）</div>
+    </div>
+
+    <div class="control">
+      <label><span>トリミング余白</span><span class="val" id="trimMarginVal">5 ms</span></label>
+      <input type="range" id="trimMargin" min="0" max="50" value="5">
+      <div class="hint">削除した境界の前後に残す保護領域（子音アタックを守る）</div>
+    </div>
+  </aside>
+</div>
+
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title"><b id="modalChar"></b><span id="modalInfo"></span></div>
+      <button class="modal-close" id="modalClose">閉じる</button>
+    </div>
+    <canvas id="largeCanvas" width="2400" height="760"></canvas>
+    <div class="modal-tools">
+      <button id="playBtn">▶ 再生</button>
+      <button id="zoomOut">−</button>
+      <button id="zoomIn">+</button>
+      <button id="zoomReset">全体表示</button>
+      <span id="zoomLabel">×1.0</span>
+      <button id="trimReset" title="自動トリミングに戻す">トリミング自動に戻す</button>
+      <label style="margin-left:12px;"><input type="checkbox" id="toggleEnv" checked> エンベロープ</label>
+      <label><input type="checkbox" id="toggleVowel" checked> 母音区間</label>
+      <span class="spacer"></span>
+      <span>Space=再生/停止 / オレンジ線をドラッグで範囲調整 / ホイール拡縮 / ダブルクリックで全体表示</span>
+    </div>
+    <div class="modal-legend">
+      <span class="raw">■ 生波形</span> &nbsp;
+      <span class="vowel">■ 推定された母音区間（開始位置に縦線）</span> &nbsp;
+      <span class="info">■ 振幅エンベロープ（参考）</span> &nbsp;
+      <span style="color:#ff9a3c;">■ 印鑑に反映される範囲（暗い領域は除外）</span>
+      <div style="margin-top:6px; color:#666;">
+        子音/母音の判定はゼロクロス率と振幅の組合せによる簡易推定です（純母音文字は境界なし、有声子音は境界が曖昧になります）。
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+const state = {
+  name: '',
+  slots: [], // each: { char, buffer (AudioBuffer|null), recording, miniCanvas }
+  resolution: 512,
+  direction: 'outward', // 'outward' | 'both'
+  boundary: 'fade',     // 'fade' | 'sharp'
+  variation: 0.30,
+  smooth: 2,
+  fadePct: 0.08,
+  trimRatio: 0.18,  // RMS threshold = peakRMS * trimRatio
+  trimMargin: 5,    // ms margin around trim region
+};
+
+let audioCtx = null;
+let activeRecorder = null;
+let activeRecorderSlotIndex = -1;
+let activeRecorderChunks = [];
+let persistentStream = null; // kept alive across recordings to avoid getUserMedia latency
+
+state.showBoundaryOnCircle = true;
+
+// ============================================================
+// Audio helpers
+// ============================================================
+async function ensureAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
+}
+
+async function ensurePersistentStream() {
+  if (persistentStream && persistentStream.active) return persistentStream;
+  try {
+    persistentStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      }
+    });
+    return persistentStream;
+  } catch (err) {
+    alert('マイクが取得できません: ' + err.message);
+    return null;
+  }
+}
+
+async function startRecording(slotIndex) {
+  if (activeRecorder) return;
+  await ensureAudioCtx();
+  const stream = await ensurePersistentStream();
+  if (!stream) return;
+  activeRecorderChunks = [];
+  // Use small timeslice to flush chunks frequently, avoiding tail cut on stop
+  activeRecorder = new MediaRecorder(stream);
+  activeRecorderSlotIndex = slotIndex;
+  activeRecorder.ondataavailable = e => activeRecorderChunks.push(e.data);
+  activeRecorder.onstop = async () => {
+    try {
+      if (activeRecorderChunks.length === 0) return;
+      const blob = new Blob(activeRecorderChunks, { type: activeRecorderChunks[0].type || 'audio/webm' });
+      const arrayBuf = await blob.arrayBuffer();
+      if (arrayBuf.byteLength === 0) return;
+      const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
+      state.slots[slotIndex].buffer = audioBuf;
+      state.slots[slotIndex].trimOverride = null;
+      renderSlots();
+      updateAll();
+    } catch (err) {
+      console.error('decode failed', err);
+    } finally {
+      activeRecorder = null;
+      activeRecorderSlotIndex = -1;
+    }
+  };
+  activeRecorder.start(50); // timeslice 50ms — chunks flushed regularly
+  state.slots[slotIndex].recording = true;
+  renderSlots();
+}
+
+function stopRecording() {
+  if (!activeRecorder) return;
+  if (activeRecorderSlotIndex >= 0) {
+    state.slots[activeRecorderSlotIndex].recording = false;
+  }
+  // Request final data flush, then stop
+  try { activeRecorder.requestData(); } catch (e) {}
+  try { activeRecorder.stop(); } catch (e) {}
+}
+
+// ============================================================
+// Slot UI
+// ============================================================
+// Returns {start, end} for a slot: manual override if present, else auto.
+function effectiveTrim(slot) {
+  if (!slot || !slot.buffer) return null;
+  if (slot.trimOverride) return slot.trimOverride;
+  return getTrimRange(slot.buffer.getChannelData(0), slot.buffer.sampleRate);
+}
+
+function renderSlots() {
+  const slotsEl = document.getElementById('slots');
+  slotsEl.innerHTML = '';
+  state.slots.forEach((slot, i) => {
+    const div = document.createElement('div');
+    div.className = 'slot';
+    if (slot.recording) div.classList.add('recording');
+    if (slot.buffer) div.classList.add('has-data');
+
+    const charEl = document.createElement('div');
+    charEl.className = 'slot-char';
+    charEl.textContent = slot.char;
+    div.appendChild(charEl);
+
+    if (!slot.buffer) {
+      // Empty slot: full-width record button
+      const btn = document.createElement('div');
+      btn.className = 'slot-btn';
+      btn.textContent = '押しっぱなしで録音';
+      attachRecordHandlers(btn, i);
+      div.appendChild(btn);
+    } else {
+      // Recorded slot: clickable mini-waveform + small re-record + delete
+      const miniWrap = document.createElement('div');
+      miniWrap.className = 'mini-wrap';
+      miniWrap.title = 'クリックで波形を拡大表示';
+      const mini = document.createElement('canvas');
+      mini.className = 'mini-canvas';
+      mini.width = 320;
+      mini.height = 80;
+      miniWrap.appendChild(mini);
+      const hint = document.createElement('div');
+      hint.className = 'mini-hint';
+      hint.textContent = '波形を拡大表示';
+      miniWrap.appendChild(hint);
+      miniWrap.addEventListener('click', () => openModal(i));
+      div.appendChild(miniWrap);
+      requestAnimationFrame(() => drawMini(mini, slot.buffer));
+
+      const rerec = document.createElement('div');
+      rerec.className = 'slot-rerec';
+      rerec.textContent = '再録音';
+      rerec.title = '押している間だけ再録音';
+      attachRecordHandlers(rerec, i);
+      div.appendChild(rerec);
+
+      const clear = document.createElement('button');
+      clear.className = 'slot-clear';
+      clear.textContent = '×';
+      clear.title = '削除';
+      clear.addEventListener('click', () => { slot.buffer = null; slot.trimOverride = null; renderSlots(); updateAll(); });
+      div.appendChild(clear);
+    }
+
+    slotsEl.appendChild(div);
+  });
+}
+
+function attachRecordHandlers(el, slotIndex) {
+  el.addEventListener('mousedown', e => { e.preventDefault(); startRecording(slotIndex); });
+  el.addEventListener('mouseup', e => { e.preventDefault(); stopRecording(); });
+  el.addEventListener('mouseleave', () => { if (state.slots[slotIndex]?.recording) stopRecording(); });
+  el.addEventListener('touchstart', e => { e.preventDefault(); startRecording(slotIndex); }, { passive: false });
+  el.addEventListener('touchend', e => { e.preventDefault(); stopRecording(); });
+}
+
+function drawMini(canvas, buffer) {
+  // Match canvas internal size to display size for crispness
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+  canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = rect.width;
+  const H = rect.height;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  const samples = buffer.getChannelData(0);
+  const N = samples.length;
+  const spp = Math.max(1, Math.floor(N / W));
+  ctx.strokeStyle = '#4a9eff';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 0; x < W; x++) {
+    const start = x * spp;
+    const end = Math.min(N, start + spp);
+    let min = 1, max = -1;
+    for (let i = start; i < end; i++) {
+      if (samples[i] < min) min = samples[i];
+      if (samples[i] > max) max = samples[i];
+    }
+    const yMin = H / 2 - max * (H / 2) * 0.95;
+    const yMax = H / 2 - min * (H / 2) * 0.95;
+    ctx.moveTo(x, yMin);
+    ctx.lineTo(x, yMax);
+  }
+  ctx.stroke();
+}
+
+// ============================================================
+// Name input
+// ============================================================
+const nameInput = document.getElementById('nameInput');
+nameInput.addEventListener('input', () => {
+  const v = nameInput.value.trim().slice(0, 5);
+  state.name = v;
+  // sync slots: keep existing buffers where possible
+  const newSlots = [];
+  for (let i = 0; i < v.length; i++) {
+    const existing = state.slots[i];
+    newSlots.push({
+      char: v[i],
+      buffer: existing && existing.char === v[i] ? existing.buffer : null,
+      recording: false,
+    });
+  }
+  state.slots = newSlots;
+  renderSlots();
+  updateAll();
+});
+
+// keyboard shortcut: 1-5 hold to record
+document.addEventListener('keydown', e => {
+  if (e.target === nameInput) return;
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= 5 && state.slots[n - 1] && !activeRecorder) {
+    e.preventDefault();
+    startRecording(n - 1);
+  }
+});
+document.addEventListener('keyup', e => {
+  if (e.target === nameInput) return;
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= 5 && activeRecorderSlotIndex === n - 1) {
+    e.preventDefault();
+    stopRecording();
+  }
+});
+
+// ============================================================
+// Controls
+// ============================================================
+function setupToggle(id, key, onChange) {
+  const el = document.getElementById(id);
+  el.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      el.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const v = btn.dataset.val;
+      state[key] = (key === 'resolution') ? parseInt(v, 10) : v;
+      onChange && onChange();
+      updateAll();
+    });
+  });
+}
+setupToggle('resolutionToggle', 'resolution');
+setupToggle('directionToggle', 'direction');
+setupToggle('boundaryToggle', 'boundary');
+
+function setupSlider(id, key, scale, suffix, valId) {
+  const slider = document.getElementById(id);
+  const valEl = document.getElementById(valId);
+  slider.addEventListener('input', () => {
+    const raw = parseFloat(slider.value);
+    state[key] = scale ? raw * scale : raw;
+    valEl.textContent = Math.round(raw) + suffix;
+    updateAll();
+  });
+}
+setupSlider('variation', 'variation', 0.01, '%', 'variationVal');
+setupSlider('smooth', 'smooth', 1, '', 'smoothVal');
+setupSlider('fade', 'fadePct', 0.01, '%', 'fadeVal');
+setupSlider('trimRatio', 'trimRatio', 0.01, '%', 'trimRatioVal');
+setupSlider('trimMargin', 'trimMargin', 1, ' ms', 'trimMarginVal');
+
+document.getElementById('showBoundaryOnCircle').addEventListener('change', e => {
+  state.showBoundaryOnCircle = e.target.checked;
+  updateAll();
+});
+
+// When global trim params change while modal is open: only auto-trim slot
+// updates (manually-overridden slot stays put so the user doesn't lose tweaks).
+function refreshTrimInModal() {
+  if (!modal.classList.contains('show') || !view.samples) return;
+  const slot = state.slots[view.slotIndex];
+  if (slot && !slot.trimOverride) {
+    const trim = getTrimRange(view.samples, view.sr);
+    view.trimStart = trim.start;
+    view.trimEnd = trim.end;
+  }
+  updateModalInfo();
+  renderLarge();
+}
+['trimRatio', 'trimMargin'].forEach(id => {
+  document.getElementById(id).addEventListener('input', refreshTrimInModal);
+});
+
+// ============================================================
+// Shape computation
+// ============================================================
+function computeShape() {
+  const N = state.slots.length;
+  const validSlots = state.slots.filter(s => s.buffer);
+  if (N === 0 || validSlots.length === 0) return null;
+
+  const resPerSector = Math.floor(state.resolution / N);
+  const totalPoints = resPerSector * N;
+
+  // For each sector, compute radial offsets
+  const offsets = new Float32Array(totalPoints); // 0..1 (will be scaled later)
+
+  for (let s = 0; s < N; s++) {
+    const slot = state.slots[s];
+    const sectorStart = s * resPerSector;
+    if (!slot.buffer) {
+      // empty sector: keep 0
+      continue;
+    }
+    const samples = slot.buffer.getChannelData(0);
+    // Always trim leading/trailing silence so the sector represents the voiced
+    // portion only. Boundary handling (sharp vs fade) only differs at edges.
+    const tr = effectiveTrim(slot);
+    const source = (tr && tr.end > tr.start) ? samples.slice(tr.start, tr.end) : new Float32Array(0);
+    if (source.length === 0) continue;
+    const resampled = resample(source, resPerSector);
+    for (let i = 0; i < resPerSector; i++) {
+      offsets[sectorStart + i] = resampled[i];
+    }
+    if (state.boundary === 'fade') {
+      applyFade(offsets, sectorStart, resPerSector, state.fadePct);
+    }
+    // sharp: no edge taper — boundary value = last trimmed sample (small but non-zero)
+  }
+
+  // Direction handling
+  if (state.direction === 'outward') {
+    for (let i = 0; i < totalPoints; i++) {
+      offsets[i] = Math.abs(offsets[i]);
+    }
+  }
+  // both: keep signed
+
+  // Normalize so max abs = 1
+  let maxAbs = 0;
+  for (let i = 0; i < totalPoints; i++) {
+    const a = Math.abs(offsets[i]);
+    if (a > maxAbs) maxAbs = a;
+  }
+  if (maxAbs > 0) {
+    for (let i = 0; i < totalPoints; i++) offsets[i] /= maxAbs;
+  }
+
+  // Smoothing (circular)
+  for (let pass = 0; pass < state.smooth; pass++) {
+    const tmp = new Float32Array(totalPoints);
+    for (let i = 0; i < totalPoints; i++) {
+      const prev = offsets[(i - 1 + totalPoints) % totalPoints];
+      const next = offsets[(i + 1) % totalPoints];
+      tmp[i] = (prev + offsets[i] * 2 + next) / 4;
+    }
+    offsets.set(tmp);
+  }
+
+  return offsets;
+}
+
+// RMS-based silence trimming: more robust than raw-amplitude threshold.
+// Computes RMS in short windows and trims windows whose RMS is below a
+// fraction of the peak RMS. Small margin (10ms) is kept on each side so
+// that consonant attacks aren't clipped.
+function getTrimRange(samples, sampleRate = 44100, opts = {}) {
+  const winMs = opts.winMs ?? 15;
+  const peakRatio = opts.peakRatio ?? state.trimRatio;
+  const marginMs = opts.marginMs ?? state.trimMargin;
+
+  const winSize = Math.max(1, Math.floor(sampleRate * winMs / 1000));
+  const numWindows = Math.floor(samples.length / winSize);
+  if (numWindows < 3) return { start: 0, end: samples.length };
+
+  const rms = new Float32Array(numWindows);
+  let peak = 0;
+  for (let w = 0; w < numWindows; w++) {
+    let sumSq = 0;
+    const base = w * winSize;
+    for (let i = 0; i < winSize; i++) {
+      const v = samples[base + i];
+      sumSq += v * v;
+    }
+    rms[w] = Math.sqrt(sumSq / winSize);
+    if (rms[w] > peak) peak = rms[w];
+  }
+  if (peak === 0) return { start: 0, end: 0 };
+
+  const threshold = peak * peakRatio;
+  let firstWin = 0;
+  while (firstWin < numWindows && rms[firstWin] < threshold) firstWin++;
+  let lastWin = numWindows - 1;
+  while (lastWin > firstWin && rms[lastWin] < threshold) lastWin--;
+  if (lastWin <= firstWin) return { start: 0, end: 0 };
+
+  const marginWindows = Math.max(0, Math.floor(marginMs / winMs));
+  firstWin = Math.max(0, firstWin - marginWindows);
+  lastWin = Math.min(numWindows - 1, lastWin + marginWindows);
+
+  const start = firstWin * winSize;
+  const end = Math.min(samples.length, (lastWin + 1) * winSize);
+  return { start, end };
+}
+
+function trimSilence(samples, sampleRate = 44100) {
+  const { start, end } = getTrimRange(samples, sampleRate);
+  if (end <= start) return new Float32Array(0);
+  return samples.slice(start, end);
+}
+
+function resample(samples, targetLen) {
+  const out = new Float32Array(targetLen);
+  const ratio = (samples.length - 1) / Math.max(1, targetLen - 1);
+  for (let i = 0; i < targetLen; i++) {
+    const srcIdx = i * ratio;
+    const lo = Math.floor(srcIdx);
+    const hi = Math.min(samples.length - 1, lo + 1);
+    const frac = srcIdx - lo;
+    out[i] = samples[lo] * (1 - frac) + samples[hi] * frac;
+  }
+  return out;
+}
+
+function applyFade(arr, start, len, pct) {
+  const fadeLen = Math.max(1, Math.floor(len * pct));
+  for (let i = 0; i < fadeLen; i++) {
+    const t = i / fadeLen; // 0..1
+    arr[start + i] *= t;
+    arr[start + len - 1 - i] *= t;
+  }
+}
+
+// ============================================================
+// Canvas rendering
+// ============================================================
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', () => { resizeCanvas(); drawShape(); });
+
+function buildPath(offsets) {
+  if (!offsets || offsets.length === 0) return [];
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const H = canvas.height / (window.devicePixelRatio || 1);
+  const cx = W / 2;
+  const cy = H / 2;
+  const baseR = Math.min(W, H) * 0.36;
+  const variation = state.variation * baseR;
+  const N = offsets.length;
+  const pts = [];
+  for (let i = 0; i < N; i++) {
+    // angle 0 starts at 12 o'clock and goes clockwise
+    const t = i / N;
+    const angle = -Math.PI / 2 + t * Math.PI * 2;
+    const r = baseR + offsets[i] * variation;
+    pts.push({
+      x: cx + Math.cos(angle) * r,
+      y: cy + Math.sin(angle) * r,
+    });
+  }
+  return pts;
+}
+
+function drawShape() {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const H = canvas.height / (window.devicePixelRatio || 1);
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+
+  if (state.slots.length === 0) {
+    ctx.fillStyle = '#bbb';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('名前を入力してください', W / 2, H / 2);
+    return;
+  }
+
+  // base circle (very light)
+  const cx = W / 2, cy = H / 2;
+  const baseR = Math.min(W, H) * 0.36;
+  ctx.strokeStyle = '#eee';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(cx, cy, baseR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // sector dividers
+  const N = state.slots.length;
+  ctx.strokeStyle = '#f0f0f0';
+  for (let i = 0; i < N; i++) {
+    const angle = -Math.PI / 2 + (i / N) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(angle) * baseR * 1.4, cy + Math.sin(angle) * baseR * 1.4);
+    ctx.stroke();
+  }
+
+  // sector char labels
+  ctx.fillStyle = '#999';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i < N; i++) {
+    const angle = -Math.PI / 2 + ((i + 0.5) / N) * Math.PI * 2;
+    const lr = baseR * 1.52;
+    ctx.fillText(state.slots[i].char, cx + Math.cos(angle) * lr, cy + Math.sin(angle) * lr);
+  }
+
+  // shape
+  const offsets = computeShape();
+  if (!offsets) {
+    ctx.fillStyle = '#bbb';
+    ctx.font = '11px sans-serif';
+    ctx.fillText('録音すると形が現れます', cx, cy);
+    document.getElementById('exportSvg').disabled = true;
+    document.getElementById('status').textContent = '';
+    return;
+  }
+
+  const pts = buildPath(offsets);
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  pts.forEach((p, i) => {
+    if (i === 0) ctx.moveTo(p.x, p.y);
+    else ctx.lineTo(p.x, p.y);
+  });
+  ctx.closePath();
+  ctx.stroke();
+
+  // optional: consonant/vowel boundary markers on the circle
+  if (state.showBoundaryOnCircle) {
+    ctx.strokeStyle = '#5cb46f';
+    ctx.lineWidth = 1.5;
+    for (let s = 0; s < state.slots.length; s++) {
+      const slot = state.slots[s];
+      if (!slot.buffer) continue;
+      const samples = slot.buffer.getChannelData(0);
+      const tr = effectiveTrim(slot);
+      if (!tr || tr.end <= tr.start) continue;
+      const trimmed = samples.slice(tr.start, tr.end);
+      const onset = detectVowelOnset(trimmed, slot.buffer.sampleRate);
+      if (onset === null) continue;
+      const frac = onset / trimmed.length;
+      const angle = -Math.PI / 2 + ((s + frac) / state.slots.length) * Math.PI * 2;
+      const r1 = baseR * 0.92;
+      const r2 = baseR * 1.18;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(angle) * r1, cy + Math.sin(angle) * r1);
+      ctx.lineTo(cx + Math.cos(angle) * r2, cy + Math.sin(angle) * r2);
+      ctx.stroke();
+    }
+  }
+
+  document.getElementById('exportSvg').disabled = false;
+  const recordedCount = state.slots.filter(s => s.buffer).length;
+  document.getElementById('status').textContent = `録音済 ${recordedCount} / ${state.slots.length}`;
+}
+
+// ============================================================
+// SVG export
+// ============================================================
+document.getElementById('exportSvg').addEventListener('click', () => {
+  const offsets = computeShape();
+  if (!offsets) return;
+  const size = 1000;
+  const cx = size / 2, cy = size / 2;
+  const baseR = size * 0.36;
+  const variation = state.variation * baseR;
+  const N = offsets.length;
+  const pts = [];
+  for (let i = 0; i < N; i++) {
+    const t = i / N;
+    const angle = -Math.PI / 2 + t * Math.PI * 2;
+    const r = baseR + offsets[i] * variation;
+    pts.push([cx + Math.cos(angle) * r, cy + Math.sin(angle) * r]);
+  }
+  let d = `M ${pts[0][0].toFixed(2)} ${pts[0][1].toFixed(2)}`;
+  for (let i = 1; i < pts.length; i++) {
+    d += ` L ${pts[i][0].toFixed(2)} ${pts[i][1].toFixed(2)}`;
+  }
+  d += ' Z';
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+  <path d="${d}" fill="none" stroke="#000" stroke-width="1.5"/>
+</svg>`;
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `seiin_${state.name || 'shape'}.svg`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 100);
+});
+
+// ============================================================
+// Vowel onset detection (approximate)
+// ============================================================
+// Compute per-frame ZCR and RMS, then find the first sustained
+// "voiced" frame (high RMS + low ZCR). Returns sample index of vowel
+// onset, or null if not detected (e.g., pure vowel from the start, or
+// noise throughout).
+function detectVowelOnset(samples, sampleRate) {
+  const frameMs = 20;
+  const frameSize = Math.floor((frameMs / 1000) * sampleRate);
+  if (frameSize <= 0 || samples.length < frameSize * 3) return null;
+
+  const frames = Math.floor(samples.length / frameSize);
+  const zcr = new Float32Array(frames);
+  const rms = new Float32Array(frames);
+
+  for (let f = 0; f < frames; f++) {
+    const start = f * frameSize;
+    let zc = 0;
+    let sumSq = 0;
+    let prev = samples[start];
+    for (let i = 1; i < frameSize; i++) {
+      const v = samples[start + i];
+      if ((prev >= 0) !== (v >= 0)) zc++;
+      sumSq += v * v;
+      prev = v;
+    }
+    zcr[f] = zc / frameSize;
+    rms[f] = Math.sqrt(sumSq / frameSize);
+  }
+
+  // Normalize
+  let maxRms = 0;
+  for (let i = 0; i < frames; i++) if (rms[i] > maxRms) maxRms = rms[i];
+  if (maxRms === 0) return null;
+  const rmsNorm = new Float32Array(frames);
+  for (let i = 0; i < frames; i++) rmsNorm[i] = rms[i] / maxRms;
+
+  // Vowel frame: rms > 0.4 (relative) AND zcr < 0.12
+  const vowelMask = new Uint8Array(frames);
+  for (let i = 0; i < frames; i++) {
+    vowelMask[i] = (rmsNorm[i] > 0.4 && zcr[i] < 0.12) ? 1 : 0;
+  }
+
+  // Find first frame where vowelMask is 1 and stays 1 for >=3 frames
+  let onsetFrame = -1;
+  for (let i = 0; i < frames - 2; i++) {
+    if (vowelMask[i] && vowelMask[i + 1] && vowelMask[i + 2]) {
+      onsetFrame = i;
+      break;
+    }
+  }
+  if (onsetFrame < 0) return null;
+
+  // Pure vowel case: if it starts at frame 0 or 1, no meaningful consonant
+  if (onsetFrame <= 1) return null;
+
+  // Sanity check: the "consonant" region before onset must actually look like a
+  // consonant. Otherwise it's likely a pure vowel that just started slowly, or
+  // it's leading silence/breath that the trim didn't catch.
+  //
+  // Real consonants have one of:
+  //   - very low RMS (stop closure / weak fricative): mean rms < 0.15
+  //   - high ZCR (fricative): mean zcr > 0.18
+  //   - high ZCR relative to vowel region (noise vs periodic)
+  let preRmsSum = 0, preZcrSum = 0;
+  for (let i = 0; i < onsetFrame; i++) {
+    preRmsSum += rmsNorm[i];
+    preZcrSum += zcr[i];
+  }
+  const preRms = preRmsSum / onsetFrame;
+  const preZcr = preZcrSum / onsetFrame;
+
+  // Vowel-region average ZCR for relative comparison
+  let voicedZcrSum = 0, voicedCount = 0;
+  for (let i = onsetFrame; i < frames; i++) {
+    if (vowelMask[i]) { voicedZcrSum += zcr[i]; voicedCount++; }
+  }
+  const voicedZcr = voicedCount > 0 ? voicedZcrSum / voicedCount : 0;
+
+  const isStopOrWeak = preRms < 0.15;
+  const isFricative = preZcr > 0.18;
+  const isNoisierThanVowel = voicedCount > 0 && preZcr > voicedZcr * 1.8;
+
+  if (!(isStopOrWeak || isFricative || isNoisierThanVowel)) return null;
+
+  return onsetFrame * frameSize;
+}
+
+function computeEnvelope(samples, sampleRate, windowMs = 20) {
+  const win = Math.max(1, Math.floor((windowMs / 1000) * sampleRate));
+  const half = Math.floor(win / 2);
+  const cumSq = new Float64Array(samples.length + 1);
+  for (let i = 0; i < samples.length; i++) cumSq[i + 1] = cumSq[i] + samples[i] * samples[i];
+  const out = new Float32Array(samples.length);
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(0, i - half);
+    const e = Math.min(samples.length, i + half + 1);
+    out[i] = Math.sqrt((cumSq[e] - cumSq[s]) / (e - s));
+  }
+  return out;
+}
+
+// ============================================================
+// Modal (enlarged per-character view)
+// ============================================================
+const modal = document.getElementById('modal');
+const modalChar = document.getElementById('modalChar');
+const modalInfo = document.getElementById('modalInfo');
+const largeCanvas = document.getElementById('largeCanvas');
+document.getElementById('modalClose').addEventListener('click', () => { fullStopPlayback(); modal.classList.remove('show'); });
+modal.addEventListener('click', e => { if (e.target === modal) { fullStopPlayback(); modal.classList.remove('show'); } });
+
+// view state for the modal canvas
+const view = {
+  zoom: 1,          // 1 = show whole recording across canvas width
+  offset: 0,        // 0..1 (fraction of total samples shown at left edge); auto-clamped
+  samples: null,
+  env: null,
+  onsetIdx: null,
+  sr: 0,
+  buffer: null,     // AudioBuffer for playback
+  playheadIdx: -1,  // sample index of current playback position, -1 if not playing
+  trimStart: 0,     // sample index where the trim region begins
+  trimEnd: 0,       // sample index where the trim region ends (exclusive)
+  slotIndex: -1,    // currently displayed slot
+};
+
+// playback state — supports play / pause / seek
+const playback = {
+  source: null,        // active BufferSource (only set while playing)
+  startTime: 0,        // audioCtx time when current source started
+  startOffsetSec: 0,   // where in the buffer the current source started
+  pausedAtSec: 0,      // 0..buffer.duration; valid when not playing
+  rafId: 0,
+  isPlaying: false,
+};
+
+function updatePlayButton() {
+  const btn = document.getElementById('playBtn');
+  if (!btn) return;
+  btn.textContent = playback.isPlaying ? '⏸ 一時停止' : '▶ 再生';
+}
+
+function stopPlaybackSource() {
+  if (playback.source) {
+    try { playback.source.onended = null; playback.source.stop(); } catch (e) {}
+    playback.source = null;
+  }
+  if (playback.rafId) {
+    cancelAnimationFrame(playback.rafId);
+    playback.rafId = 0;
+  }
+  playback.isPlaying = false;
+}
+
+function fullStopPlayback() {
+  stopPlaybackSource();
+  playback.pausedAtSec = 0;
+  view.playheadIdx = -1;
+  updatePlayButton();
+  if (view.samples) renderLarge();
+}
+
+function pausePlayback() {
+  if (!playback.isPlaying) return;
+  const elapsed = audioCtx.currentTime - playback.startTime;
+  playback.pausedAtSec = playback.startOffsetSec + elapsed;
+  if (view.buffer && playback.pausedAtSec >= view.buffer.duration) {
+    playback.pausedAtSec = 0;
+  }
+  stopPlaybackSource();
+  view.playheadIdx = Math.floor(playback.pausedAtSec * view.sr);
+  updatePlayButton();
+  renderLarge();
+}
+
+async function playFrom(offsetSec) {
+  if (!view.buffer) return;
+  await ensureAudioCtx();
+  stopPlaybackSource();
+  const src = audioCtx.createBufferSource();
+  src.buffer = view.buffer;
+  src.connect(audioCtx.destination);
+  src.onended = () => {
+    // natural end: stop and reset to 0
+    if (playback.source === src) {
+      playback.source = null;
+      playback.isPlaying = false;
+      playback.pausedAtSec = 0;
+      view.playheadIdx = -1;
+      if (playback.rafId) { cancelAnimationFrame(playback.rafId); playback.rafId = 0; }
+      updatePlayButton();
+      renderLarge();
+    }
+  };
+  const safeOffset = Math.max(0, Math.min(view.buffer.duration - 0.001, offsetSec));
+  src.start(0, safeOffset);
+  playback.source = src;
+  playback.startTime = audioCtx.currentTime;
+  playback.startOffsetSec = safeOffset;
+  playback.isPlaying = true;
+  updatePlayButton();
+  const loop = () => {
+    if (!playback.source) return;
+    const elapsed = audioCtx.currentTime - playback.startTime;
+    const curSec = playback.startOffsetSec + elapsed;
+    if (curSec >= view.buffer.duration) return; // onended will handle
+    view.playheadIdx = Math.floor(curSec * view.sr);
+    renderLarge();
+    playback.rafId = requestAnimationFrame(loop);
+  };
+  playback.rafId = requestAnimationFrame(loop);
+}
+
+function togglePlayPause() {
+  if (playback.isPlaying) pausePlayback();
+  else playFrom(playback.pausedAtSec);
+}
+
+function seekTo(sampleIdx) {
+  if (!view.buffer) return;
+  const sec = Math.max(0, Math.min(view.buffer.duration, sampleIdx / view.sr));
+  const wasPlaying = playback.isPlaying;
+  if (wasPlaying) {
+    playFrom(sec); // immediate restart from new position
+  } else {
+    playback.pausedAtSec = sec;
+    view.playheadIdx = Math.floor(sec * view.sr);
+    renderLarge();
+  }
+}
+
+function openModal(slotIndex) {
+  const slot = state.slots[slotIndex];
+  if (!slot || !slot.buffer) return;
+  const samples = slot.buffer.getChannelData(0);
+  const sr = slot.buffer.sampleRate;
+  const onsetIdx = detectVowelOnset(samples, sr);
+  const env = computeEnvelope(samples, sr, 20);
+
+  fullStopPlayback();
+  const trim = effectiveTrim(slot);
+  view.samples = samples;
+  view.env = env;
+  view.onsetIdx = onsetIdx;
+  view.sr = sr;
+  view.buffer = slot.buffer;
+  view.zoom = 1;
+  view.offset = 0;
+  view.playheadIdx = -1;
+  view.trimStart = trim.start;
+  view.trimEnd = trim.end;
+  view.slotIndex = slotIndex;
+
+  modalChar.textContent = slot.char;
+  const dur = (samples.length / sr * 1000).toFixed(0);
+  const usedMs = ((trim.end - trim.start) / sr * 1000).toFixed(0);
+  const startMs = (trim.start / sr * 1000).toFixed(0);
+  const endMs = (trim.end / sr * 1000).toFixed(0);
+  const parts = [`録音長 ${dur} ms`, `使用範囲 ${startMs}–${endMs} ms (${usedMs} ms)`];
+  if (onsetIdx !== null) {
+    const onsetMs = (onsetIdx / sr * 1000).toFixed(0);
+    parts.push(`母音開始 ≈ ${onsetMs} ms`);
+  } else {
+    parts.push(`境界検出なし`);
+  }
+  modalInfo.textContent = parts.join(' / ');
+
+  modal.classList.add('show');
+  requestAnimationFrame(() => {
+    resizeLargeCanvas();
+    renderLarge();
+  });
+}
+
+function resizeLargeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = largeCanvas.getBoundingClientRect();
+  largeCanvas.width = rect.width * dpr;
+  largeCanvas.height = rect.height * dpr;
+  const lctx = largeCanvas.getContext('2d');
+  lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function clampView() {
+  if (view.zoom < 1) view.zoom = 1;
+  if (view.zoom > 200) view.zoom = 200;
+  const maxOffset = 1 - 1 / view.zoom;
+  if (view.offset < 0) view.offset = 0;
+  if (view.offset > maxOffset) view.offset = maxOffset;
+}
+
+function renderLarge() {
+  if (!view.samples) return;
+  clampView();
+  const rect = largeCanvas.getBoundingClientRect();
+  const lctx = largeCanvas.getContext('2d');
+  drawLargeWaveform(lctx, rect.width, rect.height, view.samples, view.env, view.onsetIdx, view.zoom, view.offset);
+  document.getElementById('zoomLabel').textContent = '×' + view.zoom.toFixed(view.zoom < 10 ? 1 : 0);
+}
+
+// zoom & pan handlers
+largeCanvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (!view.samples) return;
+  const rect = largeCanvas.getBoundingClientRect();
+  const mouseX = (e.clientX - rect.left) / rect.width; // 0..1 in canvas
+  // sample index fraction under mouse before zoom
+  const sampleFracBefore = view.offset + mouseX / view.zoom;
+  // zoom: wheel up = zoom in
+  const factor = Math.exp(-e.deltaY * 0.002);
+  view.zoom *= factor;
+  if (view.zoom < 1) view.zoom = 1;
+  if (view.zoom > 200) view.zoom = 200;
+  // keep the sample under cursor fixed
+  view.offset = sampleFracBefore - mouseX / view.zoom;
+  renderLarge();
+}, { passive: false });
+
+let dragState = null;
+const DRAG_THRESHOLD = 5;        // px before pan kicks in
+const TRIM_HANDLE_HIT = 8;       // px tolerance near a trim line
+
+// Helpers: map between sample index and canvas pixel
+function sampleToCanvasX(sampleIdx) {
+  if (!view.samples) return -1;
+  const W = largeCanvas.getBoundingClientRect().width;
+  const startSampleF = view.offset * view.samples.length;
+  const visibleSamples = view.samples.length / view.zoom;
+  return ((sampleIdx - startSampleF) / visibleSamples) * W;
+}
+function canvasXToSample(x) {
+  if (!view.samples) return 0;
+  const W = largeCanvas.getBoundingClientRect().width;
+  return Math.round(view.offset * view.samples.length + (x / W) * (view.samples.length / view.zoom));
+}
+
+largeCanvas.addEventListener('mousedown', e => {
+  if (!view.samples) return;
+  const rect = largeCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+
+  // Check if user clicked near a trim handle
+  const xStart = sampleToCanvasX(view.trimStart);
+  const xEnd = sampleToCanvasX(view.trimEnd);
+  let trimDrag = null;
+  if (Math.abs(x - xStart) <= TRIM_HANDLE_HIT) trimDrag = 'start';
+  else if (Math.abs(x - xEnd) <= TRIM_HANDLE_HIT) trimDrag = 'end';
+
+  dragState = {
+    startX: e.clientX,
+    startOffset: view.offset,
+    width: rect.width,
+    moved: false,
+    trimDrag,
+  };
+  if (trimDrag) largeCanvas.style.cursor = 'ew-resize';
+});
+
+window.addEventListener('mousemove', e => {
+  // Live cursor hint near trim handles even without dragging
+  if (!dragState && modal.classList.contains('show') && view.samples) {
+    const rect = largeCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    if (x >= 0 && x <= rect.width && (e.clientY >= rect.top && e.clientY <= rect.bottom)) {
+      const xStart = sampleToCanvasX(view.trimStart);
+      const xEnd = sampleToCanvasX(view.trimEnd);
+      const nearTrim = Math.abs(x - xStart) <= TRIM_HANDLE_HIT || Math.abs(x - xEnd) <= TRIM_HANDLE_HIT;
+      largeCanvas.style.cursor = nearTrim ? 'ew-resize' : '';
+    }
+  }
+  if (!dragState) return;
+  const dx = e.clientX - dragState.startX;
+  if (dragState.trimDrag) {
+    // Trim handle drag — update view.trimStart/End immediately
+    const rect = largeCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const sampleIdx = canvasXToSample(x);
+    const N = view.samples.length;
+    if (dragState.trimDrag === 'start') {
+      view.trimStart = Math.max(0, Math.min(view.trimEnd - 1, sampleIdx));
+    } else {
+      view.trimEnd = Math.max(view.trimStart + 1, Math.min(N, sampleIdx));
+    }
+    dragState.moved = true;
+    renderLarge();
+    return;
+  }
+  if (!dragState.moved && Math.abs(dx) > DRAG_THRESHOLD) {
+    dragState.moved = true;
+    largeCanvas.classList.add('grabbing');
+  }
+  if (dragState.moved) {
+    view.offset = dragState.startOffset - (dx / dragState.width) / view.zoom;
+    renderLarge();
+  }
+});
+
+window.addEventListener('mouseup', e => {
+  if (!dragState) return;
+  if (dragState.trimDrag && dragState.moved) {
+    // Commit trim override to the slot, then recompute shape
+    const slot = state.slots[view.slotIndex];
+    if (slot) {
+      slot.trimOverride = { start: view.trimStart, end: view.trimEnd };
+      updateAll();
+      updateModalInfo();
+    }
+  } else if (!dragState.moved) {
+    // Treat as click → seek
+    const rect = largeCanvas.getBoundingClientRect();
+    const xFrac = (e.clientX - rect.left) / rect.width;
+    if (xFrac >= 0 && xFrac <= 1 && view.samples) {
+      const sampleIdx = Math.floor((view.offset + xFrac / view.zoom) * view.samples.length);
+      seekTo(sampleIdx);
+    }
+  }
+  largeCanvas.classList.remove('grabbing');
+  largeCanvas.style.cursor = '';
+  dragState = null;
+});
+
+function updateModalInfo() {
+  if (!view.samples) return;
+  const slot = state.slots[view.slotIndex];
+  const dur = (view.samples.length / view.sr * 1000).toFixed(0);
+  const usedMs = ((view.trimEnd - view.trimStart) / view.sr * 1000).toFixed(0);
+  const startMs = (view.trimStart / view.sr * 1000).toFixed(0);
+  const endMs = (view.trimEnd / view.sr * 1000).toFixed(0);
+  const manual = slot?.trimOverride ? ' (手動)' : '';
+  const parts = [`録音長 ${dur} ms`, `使用範囲${manual} ${startMs}–${endMs} ms (${usedMs} ms)`];
+  if (view.onsetIdx !== null) {
+    const onsetMs = (view.onsetIdx / view.sr * 1000).toFixed(0);
+    parts.push(`母音開始 ≈ ${onsetMs} ms`);
+  } else {
+    parts.push(`境界検出なし`);
+  }
+  modalInfo.textContent = parts.join(' / ');
+}
+largeCanvas.addEventListener('dblclick', () => {
+  view.zoom = 1; view.offset = 0; renderLarge();
+});
+
+document.getElementById('playBtn').addEventListener('click', togglePlayPause);
+document.getElementById('zoomIn').addEventListener('click', () => { view.zoom *= 1.6; renderLarge(); });
+document.getElementById('zoomOut').addEventListener('click', () => { view.zoom /= 1.6; renderLarge(); });
+document.getElementById('zoomReset').addEventListener('click', () => { view.zoom = 1; view.offset = 0; renderLarge(); });
+document.getElementById('toggleEnv').addEventListener('change', renderLarge);
+document.getElementById('toggleVowel').addEventListener('change', renderLarge);
+document.getElementById('trimReset').addEventListener('click', () => {
+  const slot = state.slots[view.slotIndex];
+  if (!slot) return;
+  slot.trimOverride = null;
+  const trim = effectiveTrim(slot);
+  view.trimStart = trim.start;
+  view.trimEnd = trim.end;
+  updateAll();
+  updateModalInfo();
+  renderLarge();
+});
+
+// Spacebar play/pause when modal is open
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && modal.classList.contains('show')) {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    e.preventDefault();
+    togglePlayPause();
+  }
+});
+window.addEventListener('resize', () => {
+  if (modal.classList.contains('show')) { resizeLargeCanvas(); renderLarge(); }
+});
+
+function drawLargeWaveform(lctx, W, H, samples, env, onsetIdx, zoom = 1, offset = 0) {
+  const showEnv = document.getElementById('toggleEnv')?.checked;
+  const showVowel = document.getElementById('toggleVowel')?.checked;
+  lctx.fillStyle = '#000';
+  lctx.fillRect(0, 0, W, H);
+
+  // center line
+  lctx.strokeStyle = '#222';
+  lctx.lineWidth = 1;
+  lctx.beginPath();
+  lctx.moveTo(0, H / 2);
+  lctx.lineTo(W, H / 2);
+  lctx.stroke();
+
+  const N = samples.length;
+  // visible sample range
+  const visibleSamples = N / zoom;
+  const startSampleF = offset * N;
+  // samples per pixel
+  const spp = visibleSamples / W;
+
+  // helper: x → sample range
+  function rangeAt(x) {
+    const s = Math.floor(startSampleF + x * spp);
+    const e = Math.floor(startSampleF + (x + 1) * spp);
+    return [Math.max(0, Math.min(N, s)), Math.max(0, Math.min(N, e))];
+  }
+
+  // raw waveform — two modes:
+  //  - if spp >= 1, draw min/max bars per column
+  //  - if spp < 1 (zoomed in past 1 sample per pixel), draw line through sample points
+  lctx.strokeStyle = '#4a9eff';
+  lctx.lineWidth = 1;
+  if (spp >= 1) {
+    lctx.beginPath();
+    for (let x = 0; x < W; x++) {
+      const [s, e] = rangeAt(x);
+      if (e <= s) continue;
+      let min = 1, max = -1;
+      for (let i = s; i < e; i++) {
+        if (samples[i] < min) min = samples[i];
+        if (samples[i] > max) max = samples[i];
+      }
+      const yMin = H / 2 - max * (H / 2) * 0.92;
+      const yMax = H / 2 - min * (H / 2) * 0.92;
+      lctx.moveTo(x, yMin);
+      lctx.lineTo(x, yMax);
+    }
+    lctx.stroke();
+  } else {
+    // line plot at sub-sample-per-pixel
+    lctx.beginPath();
+    let started = false;
+    for (let x = 0; x < W; x++) {
+      const sIdx = startSampleF + x * spp;
+      const lo = Math.floor(sIdx);
+      const hi = Math.min(N - 1, lo + 1);
+      if (lo < 0 || lo >= N) continue;
+      const frac = sIdx - lo;
+      const v = samples[lo] * (1 - frac) + samples[hi] * frac;
+      const y = H / 2 - v * (H / 2) * 0.92;
+      if (!started) { lctx.moveTo(x, y); started = true; }
+      else lctx.lineTo(x, y);
+    }
+    lctx.stroke();
+  }
+
+  // envelope overlay (yellow, mirrored)
+  if (showEnv) {
+  lctx.strokeStyle = '#ffd24a';
+  lctx.lineWidth = 1.5;
+  for (const sign of [-1, 1]) {
+    lctx.beginPath();
+    let started = false;
+    for (let x = 0; x < W; x++) {
+      const [s, e] = rangeAt(x);
+      if (e <= s) continue;
+      let m = 0;
+      if (spp >= 1) {
+        for (let i = s; i < e; i++) if (env[i] > m) m = env[i];
+      } else {
+        const sIdx = Math.floor(startSampleF + x * spp);
+        if (sIdx >= 0 && sIdx < N) m = env[sIdx];
+      }
+      const y = H / 2 + sign * m * (H / 2) * 0.92;
+      if (!started) { lctx.moveTo(x, y); started = true; }
+      else lctx.lineTo(x, y);
+    }
+    lctx.stroke();
+  }
+  }
+
+  // vowel onset line (mapped through view)
+  if (showVowel && onsetIdx !== null) {
+    const xFrac = (onsetIdx - startSampleF) / visibleSamples;
+    if (xFrac >= 0 && xFrac <= 1) {
+      const x = xFrac * W;
+      lctx.strokeStyle = '#5cff8a';
+      lctx.lineWidth = 2;
+      lctx.beginPath();
+      lctx.moveTo(x, 0);
+      lctx.lineTo(x, H);
+      lctx.stroke();
+      lctx.fillStyle = '#5cff8a';
+      lctx.font = '12px sans-serif';
+      lctx.textAlign = 'left';
+      lctx.fillText('vowel →', x + 6, 18);
+      lctx.textAlign = 'right';
+      lctx.fillStyle = '#888';
+      lctx.fillText('← 子音', x - 6, 18);
+    }
+  }
+
+  // trim range overlay: shade outside region, draw boundary lines
+  if (view.trimEnd > view.trimStart) {
+    const trimStartX = ((view.trimStart - startSampleF) / visibleSamples) * W;
+    const trimEndX = ((view.trimEnd - startSampleF) / visibleSamples) * W;
+    // shade outside
+    lctx.fillStyle = 'rgba(0,0,0,0.55)';
+    if (trimStartX > 0) lctx.fillRect(0, 0, Math.min(W, trimStartX), H);
+    if (trimEndX < W) lctx.fillRect(Math.max(0, trimEndX), 0, W - Math.max(0, trimEndX), H);
+    // boundary lines
+    lctx.strokeStyle = '#ff9a3c';
+    lctx.lineWidth = 1.5;
+    lctx.setLineDash([4, 4]);
+    if (trimStartX >= 0 && trimStartX <= W) {
+      lctx.beginPath();
+      lctx.moveTo(trimStartX, 0);
+      lctx.lineTo(trimStartX, H);
+      lctx.stroke();
+    }
+    if (trimEndX >= 0 && trimEndX <= W) {
+      lctx.beginPath();
+      lctx.moveTo(trimEndX, 0);
+      lctx.lineTo(trimEndX, H);
+      lctx.stroke();
+    }
+    lctx.setLineDash([]);
+    // labels
+    lctx.fillStyle = '#ff9a3c';
+    lctx.font = '11px sans-serif';
+    if (trimStartX > 4 && trimStartX < W - 4) {
+      lctx.textAlign = 'left';
+      lctx.fillText('使用範囲 →', trimStartX + 4, H - 12);
+    }
+    if (trimEndX > 4 && trimEndX < W - 4) {
+      lctx.textAlign = 'right';
+      lctx.fillText('← 使用範囲', trimEndX - 4, H - 12);
+    }
+  }
+
+  // playhead line
+  if (view.playheadIdx >= 0) {
+    const xFrac = (view.playheadIdx - startSampleF) / visibleSamples;
+    if (xFrac >= 0 && xFrac <= 1) {
+      const x = xFrac * W;
+      lctx.strokeStyle = '#ff5c5c';
+      lctx.lineWidth = 2;
+      lctx.beginPath();
+      lctx.moveTo(x, 0);
+      lctx.lineTo(x, H);
+      lctx.stroke();
+    }
+  }
+
+  // scrollbar at bottom
+  const sbH = 4;
+  lctx.fillStyle = '#222';
+  lctx.fillRect(0, H - sbH, W, sbH);
+  lctx.fillStyle = '#666';
+  lctx.fillRect(offset * W, H - sbH, W / zoom, sbH);
+}
+
+// ============================================================
+// Update orchestrator
+// ============================================================
+function updateAll() {
+  drawShape();
+}
+
+// Init
+resizeCanvas();
+drawShape();
+</script>
+</body>
+</html>

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>エンベロープ学習デモ</title>
+<style>
+  body {
+    margin: 0;
+    padding: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    background: #1a1a1a;
+    color: #eee;
+  }
+  h1 { font-size: 18px; margin: 0 0 8px; font-weight: 500; }
+  p.desc { font-size: 13px; color: #aaa; margin: 0 0 20px; line-height: 1.6; }
+  .controls {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    padding: 12px;
+    background: #222;
+    border-radius: 6px;
+  }
+  button {
+    background: #c8331c;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  button:hover { background: #a82a16; }
+  button:disabled { background: #555; cursor: not-allowed; }
+  .slider-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+  input[type="range"] { width: 160px; }
+  .value { color: #c8331c; font-weight: bold; min-width: 60px; }
+  canvas {
+    display: block;
+    background: #000;
+    border-radius: 4px;
+    width: 100%;
+    margin-bottom: 12px;
+  }
+  .legend {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 16px;
+    display: flex;
+    gap: 16px;
+  }
+  .legend span::before {
+    content: "■ ";
+  }
+  .legend .raw { color: #4a9eff; }
+  .legend .env { color: #ff5c5c; }
+  .legend .env2 { color: #ffd24a; }
+  .label {
+    font-size: 12px;
+    color: #888;
+    margin: 16px 0 4px;
+  }
+  .note {
+    background: #2a2a2a;
+    border-left: 3px solid #c8331c;
+    padding: 12px 16px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #ccc;
+    margin-top: 24px;
+    border-radius: 4px;
+  }
+  .note b { color: #fff; }
+</style>
+</head>
+<body>
+
+<h1>エンベロープ学習デモ</h1>
+<p class="desc">
+  マイクで何か発声 → 生波形（青）とエンベロープ（赤・黄）を同時に表示します。<br>
+  窓サイズを変えるとエンベロープの粒度がどう変わるか確認できます。
+</p>
+
+<div class="controls">
+  <button id="recBtn">録音開始</button>
+  <button id="playBtn" disabled>再生</button>
+  <div class="slider-group">
+    <label>窓サイズ A:</label>
+    <input type="range" id="winA" min="1" max="200" value="20" step="1">
+    <span class="value" id="winAVal">20 ms</span>
+  </div>
+  <div class="slider-group">
+    <label>窓サイズ B:</label>
+    <input type="range" id="winB" min="1" max="200" value="80" step="1">
+    <span class="value" id="winBVal">80 ms</span>
+  </div>
+</div>
+
+<div class="legend">
+  <span class="raw">生波形（raw）</span>
+  <span class="env">エンベロープ A（窓サイズ小）</span>
+  <span class="env2">エンベロープ B（窓サイズ大）</span>
+</div>
+
+<div class="label">録音波形（横軸=時間、縦軸=振幅）</div>
+<canvas id="canvas" width="1600" height="500"></canvas>
+
+<div class="note">
+  <b>見方のコツ：</b><br>
+  ・<b>青い細かいギザギザ</b>が生波形。0を中心に上下に振動している。<br>
+  ・<b>赤い線</b>がエンベロープ（窓サイズ小 = 反応が速い、ギザつく）。<br>
+  ・<b>黄色い線</b>がエンベロープ（窓サイズ大 = なだらか、大きな起伏だけ残る）。<br>
+  ・両方とも「青いギザギザを2乗 → 一定区間で平均 → 平方根（RMS）」で作られた、<b>音量の大きさの曲線</b>。<br>
+  ・窓サイズが大きいほど、瞬間的な変化は無視されて、なだらかな音量カーブになる。
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const recBtn = document.getElementById('recBtn');
+const playBtn = document.getElementById('playBtn');
+const winA = document.getElementById('winA');
+const winB = document.getElementById('winB');
+const winAVal = document.getElementById('winAVal');
+const winBVal = document.getElementById('winBVal');
+
+let audioCtx;
+let mediaStream;
+let recorder;
+let recordedBuffer = null; // AudioBuffer
+let isRecording = false;
+
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = 500 * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', () => { resizeCanvas(); draw(); });
+resizeCanvas();
+
+recBtn.addEventListener('click', async () => {
+  if (!isRecording) {
+    await startRecording();
+  } else {
+    stopRecording();
+  }
+});
+
+playBtn.addEventListener('click', () => {
+  if (!recordedBuffer) return;
+  const src = audioCtx.createBufferSource();
+  src.buffer = recordedBuffer;
+  src.connect(audioCtx.destination);
+  src.start();
+});
+
+[winA, winB].forEach(slider => {
+  slider.addEventListener('input', () => {
+    winAVal.textContent = winA.value + ' ms';
+    winBVal.textContent = winB.value + ' ms';
+    draw();
+  });
+});
+
+async function startRecording() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    alert('マイクが取得できません: ' + err.message);
+    return;
+  }
+
+  const chunks = [];
+  recorder = new MediaRecorder(mediaStream);
+  recorder.ondataavailable = e => chunks.push(e.data);
+  recorder.onstop = async () => {
+    const blob = new Blob(chunks, { type: chunks[0].type });
+    const arrayBuf = await blob.arrayBuffer();
+    recordedBuffer = await audioCtx.decodeAudioData(arrayBuf);
+    playBtn.disabled = false;
+    draw();
+    mediaStream.getTracks().forEach(t => t.stop());
+  };
+  recorder.start();
+  isRecording = true;
+  recBtn.textContent = '録音停止';
+  recBtn.style.background = '#555';
+}
+
+function stopRecording() {
+  if (recorder) recorder.stop();
+  isRecording = false;
+  recBtn.textContent = '録音開始';
+  recBtn.style.background = '#c8331c';
+}
+
+// RMS envelope: window size in milliseconds
+function computeRMS(samples, sampleRate, windowMs) {
+  const windowSize = Math.max(1, Math.floor((windowMs / 1000) * sampleRate));
+  const half = Math.floor(windowSize / 2);
+  const out = new Float32Array(samples.length);
+  // Use prefix sums of squared samples for O(n) RMS
+  const cumSq = new Float64Array(samples.length + 1);
+  for (let i = 0; i < samples.length; i++) {
+    cumSq[i + 1] = cumSq[i] + samples[i] * samples[i];
+  }
+  for (let i = 0; i < samples.length; i++) {
+    const start = Math.max(0, i - half);
+    const end = Math.min(samples.length, i + half + 1);
+    const sumSq = cumSq[end] - cumSq[start];
+    out[i] = Math.sqrt(sumSq / (end - start));
+  }
+  return out;
+}
+
+function draw() {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const H = canvas.height / (window.devicePixelRatio || 1);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  // center line
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, H / 2);
+  ctx.lineTo(W, H / 2);
+  ctx.stroke();
+
+  if (!recordedBuffer) {
+    ctx.fillStyle = '#666';
+    ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('「録音開始」を押して何か発声してください', W / 2, H / 2);
+    return;
+  }
+
+  const samples = recordedBuffer.getChannelData(0);
+  const sr = recordedBuffer.sampleRate;
+  const N = samples.length;
+
+  // Decimate for drawing
+  const samplesPerPixel = Math.max(1, Math.floor(N / W));
+
+  // Draw raw waveform as min/max envelope per pixel column
+  ctx.strokeStyle = '#4a9eff';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 0; x < W; x++) {
+    const start = Math.floor(x * samplesPerPixel);
+    const end = Math.min(N, start + samplesPerPixel);
+    let min = 1, max = -1;
+    for (let i = start; i < end; i++) {
+      const v = samples[i];
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    const yMin = H / 2 - max * (H / 2) * 0.95;
+    const yMax = H / 2 - min * (H / 2) * 0.95;
+    ctx.moveTo(x, yMin);
+    ctx.lineTo(x, yMax);
+  }
+  ctx.stroke();
+
+  // Compute and draw envelopes
+  drawEnvelope(samples, sr, parseFloat(winA.value), '#ff5c5c', W, H);
+  drawEnvelope(samples, sr, parseFloat(winB.value), '#ffd24a', W, H);
+}
+
+function drawEnvelope(samples, sr, windowMs, color, W, H) {
+  const env = computeRMS(samples, sr, windowMs);
+  const N = samples.length;
+  const samplesPerPixel = Math.max(1, Math.floor(N / W));
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  // upper
+  ctx.beginPath();
+  for (let x = 0; x < W; x++) {
+    const start = Math.floor(x * samplesPerPixel);
+    const end = Math.min(N, start + samplesPerPixel);
+    let m = 0;
+    for (let i = start; i < end; i++) {
+      if (env[i] > m) m = env[i];
+    }
+    const y = H / 2 - m * (H / 2) * 0.95;
+    if (x === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // lower (mirror)
+  ctx.beginPath();
+  for (let x = 0; x < W; x++) {
+    const start = Math.floor(x * samplesPerPixel);
+    const end = Math.min(N, start + samplesPerPixel);
+    let m = 0;
+    for (let i = start; i < end; i++) {
+      if (env[i] > m) m = env[i];
+    }
+    const y = H / 2 + m * (H / 2) * 0.95;
+    if (x === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,1471 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>聲印 — Voice Seal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;500;700;900&family=Klee+One:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
+<style>
+  :root {
+    --paper: #f4ede0;
+    --paper-shadow: #e8dfce;
+    --ink: #1a1614;
+    --vermilion: #c8331c;
+    --vermilion-deep: #9b2614;
+    --vermilion-soft: #d94a30;
+    --gold: #b08c4a;
+    --rule: #2a221e;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    font-family: 'Shippori Mincho', serif;
+    background: var(--paper);
+    color: var(--ink);
+    position: relative;
+    background-image:
+      radial-gradient(ellipse at 20% 30%, rgba(176, 140, 74, 0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 70%, rgba(200, 51, 28, 0.04) 0%, transparent 50%);
+  }
+
+  /* paper grain */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(26,22,20,0.012) 0 1px, transparent 1px 3px),
+      repeating-linear-gradient(90deg, rgba(26,22,20,0.012) 0 1px, transparent 1px 3px);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .frame {
+    position: fixed; inset: 24px;
+    border: 1px solid rgba(26,22,20,0.25);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .frame::before, .frame::after {
+    content: '';
+    position: absolute;
+    border: 1px solid rgba(26,22,20,0.15);
+  }
+  .frame::before { inset: 6px; }
+  .frame::after { inset: 12px; border-color: rgba(26,22,20,0.08); }
+
+  .layout {
+    position: relative;
+    z-index: 3;
+    display: grid;
+    grid-template-columns: 280px 1fr 320px;
+    grid-template-rows: 1fr 100px;
+    height: 100vh;
+    padding: 48px 60px 24px;
+    gap: 24px 40px;
+  }
+
+  /* ─── LEFT ─── */
+  .left {
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .brand {
+    writing-mode: vertical-rl;
+    font-size: 13px;
+    letter-spacing: 0.4em;
+    color: rgba(26,22,20,0.5);
+    align-self: flex-start;
+    margin-bottom: 32px;
+  }
+
+  .title-block h1 {
+    font-family: 'Shippori Mincho', serif;
+    font-weight: 900;
+    font-size: 64px;
+    line-height: 1;
+    letter-spacing: 0.05em;
+    margin-bottom: 12px;
+  }
+  .title-block .romaji {
+    font-family: 'Klee One', serif;
+    font-size: 11px;
+    letter-spacing: 0.5em;
+    color: var(--vermilion);
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+  .title-block .lede {
+    font-size: 13px;
+    line-height: 1.9;
+    color: rgba(26,22,20,0.7);
+    max-width: 240px;
+  }
+
+  .name-input-block {
+    border-top: 1px solid rgba(26,22,20,0.2);
+    padding-top: 20px;
+  }
+  .name-input-block .label {
+    font-size: 10px;
+    letter-spacing: 0.4em;
+    color: rgba(26,22,20,0.5);
+    margin-bottom: 8px;
+  }
+  .name-input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--ink);
+    font-family: 'Shippori Mincho', serif;
+    font-size: 28px;
+    font-weight: 500;
+    padding: 6px 0;
+    color: var(--ink);
+    outline: none;
+  }
+  .name-input::placeholder { color: rgba(26,22,20,0.25); }
+  .name-hint {
+    font-size: 10px;
+    color: rgba(26,22,20,0.45);
+    margin-top: 6px;
+  }
+
+  /* ─── CENTER ─── */
+  .stage {
+    grid-row: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+  }
+  .stage-inner { position: relative; }
+  #sealCanvas { display: block; }
+
+  .stage-meta {
+    position: absolute;
+    bottom: -28px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    letter-spacing: 0.4em;
+    color: rgba(26,22,20,0.4);
+    white-space: nowrap;
+  }
+
+  .rec-indicator {
+    position: absolute;
+    top: 12px; right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--vermilion);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .rec-indicator.active { opacity: 1; }
+  .rec-dot {
+    width: 8px; height: 8px;
+    background: var(--vermilion);
+    border-radius: 50%;
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.3; transform: scale(0.7); }
+  }
+
+  /* ─── RIGHT ─── */
+  .right {
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .panel {
+    border: 1px solid rgba(26,22,20,0.15);
+    padding: 20px;
+    background: rgba(255, 252, 245, 0.4);
+  }
+
+  .panel-label {
+    font-size: 10px;
+    letter-spacing: 0.4em;
+    color: rgba(26,22,20,0.5);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel-label::before {
+    content: '';
+    width: 6px; height: 6px;
+    background: var(--vermilion);
+  }
+
+  .mode-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 14px;
+    border: 1px solid var(--ink);
+  }
+  .mode-tab {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--ink);
+    padding: 10px 4px;
+    font-family: 'Shippori Mincho', serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .mode-tab:last-child { border-right: none; }
+  .mode-tab.active { background: var(--ink); color: var(--paper); }
+  .mode-tab:hover:not(.active) { background: rgba(26,22,20,0.05); }
+
+  .mode-description {
+    font-size: 12px;
+    line-height: 1.8;
+    color: rgba(26,22,20,0.75);
+    min-height: 100px;
+  }
+  .mode-description strong {
+    display: block;
+    font-size: 14px;
+    color: var(--ink);
+    margin-bottom: 6px;
+    font-weight: 700;
+  }
+
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .btn {
+    background: transparent;
+    border: 1px solid var(--ink);
+    padding: 14px 20px;
+    font-family: 'Shippori Mincho', serif;
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    color: var(--ink);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  .btn:hover:not(:disabled) { background: var(--ink); color: var(--paper); }
+  .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .btn.primary { background: var(--vermilion); border-color: var(--vermilion); color: var(--paper); }
+  .btn.primary:hover:not(:disabled) { background: var(--vermilion-deep); border-color: var(--vermilion-deep); }
+  .btn.recording { background: var(--vermilion-deep); border-color: var(--vermilion-deep); color: var(--paper); }
+
+  .status {
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    color: rgba(26,22,20,0.55);
+    text-align: center;
+    padding: 8px 0;
+    min-height: 28px;
+  }
+
+  .intensity-control { display: flex; align-items: center; gap: 12px; }
+  .slider {
+    flex: 1;
+    -webkit-appearance: none; appearance: none;
+    height: 2px;
+    background: var(--ink);
+    outline: none;
+    cursor: pointer;
+  }
+  .slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .slider::-moz-range-thumb {
+    width: 14px; height: 14px;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .intensity-value { font-size: 13px; font-weight: 500; min-width: 40px; text-align: right; }
+
+  /* corner marks */
+  .corner-mark {
+    position: fixed;
+    font-family: 'Shippori Mincho', serif;
+    font-weight: 900;
+    font-size: 14px;
+    color: rgba(200, 51, 28, 0.4);
+    letter-spacing: 0.3em;
+    z-index: 4;
+  }
+  .corner-mark.tl { top: 36px; left: 50%; transform: translateX(-50%); }
+  .corner-mark.br { bottom: 36px; right: 80px; color: rgba(26,22,20,0.4); font-size: 10px; letter-spacing: 0.5em; }
+
+  /* ─── BOTTOM: timeline panel ─── */
+  .timeline-panel {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    border: 1px solid rgba(26,22,20,0.15);
+    background: rgba(255, 252, 245, 0.4);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    height: 100px;
+  }
+
+  .timeline-label {
+    font-size: 10px;
+    letter-spacing: 0.4em;
+    color: rgba(26,22,20,0.5);
+    writing-mode: vertical-rl;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .timeline-container {
+    flex: 1;
+    position: relative;
+    height: 80px;
+    user-select: none;
+  }
+
+  #timelineCanvas {
+    position: absolute;
+    top: 0; left: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .range-mask {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: rgba(26,22,20,0.15);
+  }
+  .range-mask.left { left: 0; }
+  .range-mask.right { right: 0; }
+  .range-handle {
+    position: absolute;
+    top: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--vermilion);
+    cursor: ew-resize;
+    pointer-events: auto;
+    z-index: 1;
+    padding: 0 8px;
+    margin-left: -8px;
+    background-clip: content-box;
+  }
+  .range-handle::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 11px; height: 28px;
+    border: 1px solid var(--vermilion);
+    background: var(--paper);
+    border-radius: 2px;
+  }
+  .timeline-info {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: rgba(26,22,20,0.5);
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 80px;
+    text-align: right;
+  }
+
+  @media (max-width: 1100px) {
+    .layout {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr auto auto;
+      padding: 40px 24px;
+      gap: 24px;
+      overflow-y: auto;
+      height: auto;
+      min-height: 100vh;
+    }
+    html, body { overflow: auto; }
+    .stage-inner { margin: 0 auto; }
+    .brand { display: none; }
+    .title-block h1 { font-size: 44px; }
+    .timeline-panel { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="frame"></div>
+<div class="corner-mark tl">聲 印</div>
+<div class="corner-mark br">VOICE × SEAL — PROTOTYPE</div>
+
+<div class="layout">
+
+  <!-- LEFT -->
+  <div class="left">
+    <div>
+      <div class="brand">A NAME · A VOICE · A SHAPE</div>
+      <div class="title-block">
+        <h1>聲印</h1>
+        <div class="romaji">Sei-in</div>
+        <p class="lede">
+          名は朱に刻み、声は輪郭となる。<br>
+          発した声の倍音と韻律が、<br>
+          一度限りのあなたの印を象る。
+        </p>
+      </div>
+    </div>
+    <div class="name-input-block">
+      <div class="label">姓 名 / NAME</div>
+      <input id="nameInput" class="name-input" type="text" maxlength="4" value="高木" placeholder="最大4文字">
+      <div class="name-hint">2文字 → 縦中央 ・ 4文字 → 2×2配置</div>
+    </div>
+  </div>
+
+  <!-- CENTER -->
+  <div class="stage">
+    <div class="stage-inner">
+      <div class="rec-indicator" id="recIndicator">
+        <div class="rec-dot"></div>
+        <span>RECORDING</span>
+      </div>
+      <canvas id="sealCanvas"></canvas>
+      <div class="stage-meta" id="stageMeta">— 真円 —</div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right">
+    <div class="panel">
+      <div class="panel-label">特徴量モード</div>
+      <div class="mode-tabs" id="modeTabs">
+        <button class="mode-tab" data-mode="A">A 生波</button>
+        <button class="mode-tab" data-mode="E">E 制波</button>
+        <button class="mode-tab active" data-mode="B">B 倍音</button>
+        <button class="mode-tab" data-mode="C">C 母音</button>
+        <button class="mode-tab" data-mode="D">D 複合</button>
+      </div>
+      <div class="mode-description" id="modeDescription">
+        <strong>B — スペクトル（倍音構成）</strong>
+        円周に低音から高音までを配置し、各周波数の強さで半径が決まる。声質の豊かさ＝輪郭の複雑さ。同じ名前でも人によって全く違う形になる、声紋的なアプローチ。
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-label">揺らぎ強度</div>
+      <div class="intensity-control">
+        <input type="range" id="intensitySlider" min="0" max="200" value="100" class="slider">
+        <div class="intensity-value" id="intensityValue">100%</div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-label">解像度</div>
+      <div class="intensity-control">
+        <input type="range" id="resolutionSlider" min="6" max="14" value="8" class="slider">
+        <div class="intensity-value" id="resolutionValue">256</div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-label">録 音</div>
+      <div class="controls">
+        <button class="btn primary" id="recordBtn">録音開始</button>
+        <button class="btn" id="resetBtn">真円に戻す</button>
+      </div>
+      <div class="status" id="status">マイクの使用を許可してください</div>
+    </div>
+    <div class="panel">
+      <div class="panel-label">書き出し</div>
+      <div class="controls">
+        <button class="btn" id="exportOutline">SVG — 円のみ</button>
+        <button class="btn" id="exportWithText">SVG — 円+文字</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM: timeline -->
+  <div class="timeline-panel">
+    <div class="timeline-label" id="timelineLabel">WAVEFORM</div>
+    <div class="timeline-container" id="timelineContainer">
+      <canvas id="timelineCanvas"></canvas>
+      <div class="range-mask left" id="rangeMaskL"></div>
+      <div class="range-mask right" id="rangeMaskR"></div>
+      <div class="range-handle" id="rangeHandleL" style="left: 0%"></div>
+      <div class="range-handle" id="rangeHandleR" style="left: 100%"></div>
+    </div>
+    <div class="timeline-info" id="timelineInfo">0.0s - 0.0s</div>
+  </div>
+
+</div>
+
+<script>
+// =====================================================================
+//  1. STATE
+// =====================================================================
+const S = {
+  mode: 'B',
+  recording: false,
+  intensity: 1.0,
+
+  // audio nodes
+  audioCtx: null,
+  analyser: null,
+  source: null,
+  stream: null,
+  scriptNode: null,
+
+  // circle shape (256 points)
+  N: 256,
+  currentRadii: new Array(256).fill(1.0),
+  targetRadii:  new Array(256).fill(1.0),
+
+  // recorded audio
+  sampleRate: 44100,
+  chunks: [],          // Float32Array[] during recording
+  samples: null,       // Float32Array of full recording (after stop)
+
+  // per-frame FFT data (stored for B/C/D recomputation)
+  frames: [],          // [{freqData, timeData, sampleIndex}]
+
+  // range selection (0..1 normalized, maps to time)
+  rangeStart: 0,
+  rangeEnd: 1,
+
+  // live waveform scroll (samples already recorded)
+  liveSampleCount: 0,
+
+  // for background decoration
+  lastTimeData: null,
+
+  // computed radii for panel (post-stop, B/C/D only)
+  displayRadii: null,
+
+  noiseFloor: 0.02,
+};
+
+// =====================================================================
+//  2. SEAL CANVAS
+// =====================================================================
+const sealCanvas = document.getElementById('sealCanvas');
+const sealCtx = sealCanvas.getContext('2d');
+
+function resizeSealCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const stage = document.querySelector('.stage');
+  const r = stage.getBoundingClientRect();
+  const size = Math.min(r.width, r.height);
+  sealCanvas.style.width = size + 'px';
+  sealCanvas.style.height = size + 'px';
+  sealCanvas.width = size * dpr;
+  sealCanvas.height = size * dpr;
+  sealCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function drawSeal() {
+  const r = sealCanvas.getBoundingClientRect();
+  const w = r.width, h = r.height;
+  sealCtx.clearRect(0, 0, w, h);
+
+  // subtle live waveform background
+  if (S.recording && S.lastTimeData) {
+    const td = S.lastTimeData;
+    const cx = w / 2, cy = h / 2;
+    sealCtx.beginPath();
+    for (let i = 0; i < td.length; i++) {
+      const x = (i / td.length) * w;
+      const v = (td[i] - 128) / 128;
+      if (i === 0) sealCtx.moveTo(x, cy + v * h * 0.3);
+      else sealCtx.lineTo(x, cy + v * h * 0.3);
+    }
+    sealCtx.strokeStyle = 'rgba(200,51,28,0.08)';
+    sealCtx.lineWidth = 1;
+    sealCtx.stroke();
+  }
+
+  const cx = w / 2, cy = h / 2;
+  const baseR = Math.min(w, h) * 0.42;
+  const pts = [];
+  for (let i = 0; i < S.N; i++) {
+    const a = (i / S.N) * Math.PI * 2 - Math.PI / 2;
+    const rad = baseR * S.currentRadii[i];
+    pts.push({ x: cx + Math.cos(a) * rad, y: cy + Math.sin(a) * rad });
+  }
+
+  // outline
+  sealCtx.strokeStyle = '#c8331c';
+  sealCtx.lineWidth = 1.5;
+  sealCtx.beginPath();
+  smoothClosedPath(sealCtx, pts);
+  sealCtx.stroke();
+
+  // name
+  drawName(sealCtx, cx, cy, baseR);
+}
+
+function smoothClosedPath(ctx, pts) {
+  const n = pts.length;
+  const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const m0 = mid(pts[n - 1], pts[0]);
+  ctx.moveTo(m0.x, m0.y);
+  for (let i = 0; i < n; i++) {
+    const m = mid(pts[i], pts[(i + 1) % n]);
+    ctx.quadraticCurveTo(pts[i].x, pts[i].y, m.x, m.y);
+  }
+  ctx.closePath();
+}
+
+function drawName(ctx, cx, cy, baseR) {
+  const name = (document.getElementById('nameInput').value || '').slice(0, 4);
+  if (!name) return;
+  ctx.fillStyle = '#c8331c';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  if (name.length === 1) {
+    ctx.font = `900 ${baseR * 0.55}px "Shippori Mincho", serif`;
+    ctx.fillText(name, cx, cy);
+  } else if (name.length === 2) {
+    const fs = baseR * 0.72;
+    ctx.font = `900 ${fs}px "Shippori Mincho", serif`;
+    ctx.fillText(name[0], cx, cy - fs * 0.42);
+    ctx.fillText(name[1], cx, cy + fs * 0.42);
+  } else if (name.length === 3) {
+    const fs = baseR * 0.5;
+    ctx.font = `900 ${fs}px "Shippori Mincho", serif`;
+    ctx.fillText(name[0], cx, cy - fs * 0.85);
+    ctx.fillText(name[1], cx, cy);
+    ctx.fillText(name[2], cx, cy + fs * 0.85);
+  } else {
+    const fs = baseR * 0.58;
+    ctx.font = `900 ${fs}px "Shippori Mincho", serif`;
+    const off = fs * 0.5;
+    ctx.fillText(name[0], cx + off, cy - off);
+    ctx.fillText(name[1], cx - off, cy - off);
+    ctx.fillText(name[2], cx + off, cy + off);
+    ctx.fillText(name[3], cx - off, cy + off);
+  }
+}
+
+// =====================================================================
+//  3. TIMELINE CANVAS
+// =====================================================================
+const tlCanvas = document.getElementById('timelineCanvas');
+const tlCtx = tlCanvas.getContext('2d');
+
+function resizeTimelineCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const r = tlCanvas.getBoundingClientRect();
+  tlCanvas.width = r.width * dpr;
+  tlCanvas.height = r.height * dpr;
+  tlCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+// Draw raw waveform (used during recording and for mode A after stop)
+function drawWaveformTimeline(samples, totalLen, isLive) {
+  const r = tlCanvas.getBoundingClientRect();
+  const w = r.width, h = r.height;
+  if (w === 0 || h === 0) return;
+  tlCtx.clearRect(0, 0, w, h);
+
+  if (!samples && !S.chunks.length) {
+    // empty state
+    tlCtx.strokeStyle = 'rgba(26,22,20,0.1)';
+    tlCtx.lineWidth = 1;
+    tlCtx.beginPath();
+    tlCtx.moveTo(0, h / 2);
+    tlCtx.lineTo(w, h / 2);
+    tlCtx.stroke();
+    tlCtx.fillStyle = 'rgba(26,22,20,0.3)';
+    tlCtx.font = '10px "Shippori Mincho", serif';
+    tlCtx.textAlign = 'center';
+    tlCtx.fillText('録音すると波形が表示されます', w / 2, h / 2 - 8);
+    return;
+  }
+
+  // center line
+  tlCtx.strokeStyle = 'rgba(26,22,20,0.06)';
+  tlCtx.lineWidth = 1;
+  tlCtx.beginPath();
+  tlCtx.moveTo(0, h / 2);
+  tlCtx.lineTo(w, h / 2);
+  tlCtx.stroke();
+
+  const cy = h / 2;
+  const amp = h * 0.45;
+
+  if (isLive) {
+    // live: right-end fixed, show latest ~visibleSeconds of audio
+    const visibleSamples = Math.min(totalLen, Math.floor(S.sampleRate * 3));
+    const startSample = Math.max(0, totalLen - visibleSamples);
+    drawSamplesRange(startSample, totalLen, w, cy, amp, 'rgba(200,51,28,0.6)');
+  } else {
+    // stopped: show full waveform, highlight range
+    drawSamplesFromArray(samples, 0, samples.length, w, cy, amp, 'rgba(26,22,20,0.2)');
+    // highlight selected range
+    const startX = S.rangeStart * w;
+    const endX = S.rangeEnd * w;
+    tlCtx.save();
+    tlCtx.beginPath();
+    tlCtx.rect(startX, 0, endX - startX, h);
+    tlCtx.clip();
+    drawSamplesFromArray(samples, 0, samples.length, w, cy, amp, 'rgba(200,51,28,0.6)');
+    tlCtx.restore();
+  }
+}
+
+// Draw samples from chunks (live, may span multiple chunks)
+function drawSamplesRange(startSample, endSample, w, cy, amp, color) {
+  const totalSamples = endSample - startSample;
+  const step = Math.max(1, Math.floor(totalSamples / w));
+  tlCtx.beginPath();
+  let first = true;
+  let chunkOffset = 0;
+  let sampleIdx = 0;
+  for (const chunk of S.chunks) {
+    const chunkEnd = chunkOffset + chunk.length;
+    for (let i = 0; i < chunk.length; i += step) {
+      const globalIdx = chunkOffset + i;
+      if (globalIdx < startSample) continue;
+      if (globalIdx >= endSample) break;
+      const x = ((globalIdx - startSample) / totalSamples) * w;
+      const y = cy - chunk[i] * amp;
+      if (first) { tlCtx.moveTo(x, y); first = false; }
+      else tlCtx.lineTo(x, y);
+    }
+    chunkOffset = chunkEnd;
+    if (chunkOffset >= endSample) break;
+  }
+  tlCtx.strokeStyle = color;
+  tlCtx.lineWidth = 1;
+  tlCtx.stroke();
+}
+
+// Draw samples from a single Float32Array
+function drawSamplesFromArray(arr, start, end, w, cy, amp, color) {
+  const len = end - start;
+  const step = Math.max(1, Math.floor(len / w));
+  tlCtx.beginPath();
+  for (let i = start; i < end; i += step) {
+    const x = ((i - start) / len) * w;
+    const y = cy - arr[i] * amp;
+    if (i === start) tlCtx.moveTo(x, y);
+    else tlCtx.lineTo(x, y);
+  }
+  tlCtx.strokeStyle = color;
+  tlCtx.lineWidth = 1;
+  tlCtx.stroke();
+}
+
+// Draw radii (for B/C/D after stop)
+function drawRadiiTimeline(radii) {
+  const r = tlCanvas.getBoundingClientRect();
+  const w = r.width, h = r.height;
+  if (w === 0 || h === 0 || !radii) return;
+  tlCtx.clearRect(0, 0, w, h);
+
+  const N = radii.length;
+  let minR = Infinity, maxR = -Infinity;
+  for (let i = 0; i < N; i++) {
+    if (radii[i] < minR) minR = radii[i];
+    if (radii[i] > maxR) maxR = radii[i];
+  }
+  const range = Math.max(maxR - minR, 0.01);
+  const mg = 6;
+
+  // baseline r=1.0
+  const baseY = mg + (h - mg * 2) * (1 - (1.0 - minR) / range);
+  tlCtx.strokeStyle = 'rgba(26,22,20,0.08)';
+  tlCtx.setLineDash([4, 4]);
+  tlCtx.beginPath();
+  tlCtx.moveTo(0, baseY);
+  tlCtx.lineTo(w, baseY);
+  tlCtx.stroke();
+  tlCtx.setLineDash([]);
+
+  // gray fill
+  tlCtx.beginPath();
+  tlCtx.moveTo(0, h);
+  for (let i = 0; i < N; i++) {
+    tlCtx.lineTo((i / (N - 1)) * w, mg + (h - mg * 2) * (1 - (radii[i] - minR) / range));
+  }
+  tlCtx.lineTo(w, h);
+  tlCtx.closePath();
+  tlCtx.fillStyle = 'rgba(26,22,20,0.06)';
+  tlCtx.fill();
+
+  // vermilion selected range
+  const sx = S.rangeStart * w, ex = S.rangeEnd * w;
+  tlCtx.save();
+  tlCtx.beginPath();
+  tlCtx.rect(sx, 0, ex - sx, h);
+  tlCtx.clip();
+  tlCtx.beginPath();
+  tlCtx.moveTo(sx, h);
+  for (let i = 0; i < N; i++) {
+    tlCtx.lineTo((i / (N - 1)) * w, mg + (h - mg * 2) * (1 - (radii[i] - minR) / range));
+  }
+  tlCtx.lineTo(ex, h);
+  tlCtx.closePath();
+  tlCtx.fillStyle = 'rgba(200,51,28,0.15)';
+  tlCtx.fill();
+  tlCtx.restore();
+
+  // line
+  tlCtx.beginPath();
+  for (let i = 0; i < N; i++) {
+    const x = (i / (N - 1)) * w;
+    const y = mg + (h - mg * 2) * (1 - (radii[i] - minR) / range);
+    if (i === 0) tlCtx.moveTo(x, y); else tlCtx.lineTo(x, y);
+  }
+  tlCtx.strokeStyle = 'rgba(200,51,28,0.5)';
+  tlCtx.lineWidth = 1.5;
+  tlCtx.stroke();
+}
+
+function updateTimeline() {
+  if (S.recording) {
+    drawWaveformTimeline(null, S.liveSampleCount, true);
+  } else if (S.samples) {
+    if (S.mode === 'A' || S.mode === 'E') {
+      drawWaveformTimeline(S.samples, S.samples.length, false);
+    } else {
+      drawRadiiTimeline(S.displayRadii);
+    }
+  }
+}
+
+// =====================================================================
+//  4. RADII COMPUTATION
+// =====================================================================
+
+// --- Shared utilities ---
+function circularSmooth(arr, passes) {
+  let a = arr.slice();
+  const N = a.length;
+  for (let p = 0; p < passes; p++) {
+    const b = new Array(N);
+    for (let i = 0; i < N; i++) b[i] = (a[(i - 1 + N) % N] + a[i] + a[(i + 1) % N]) / 3;
+    a = b;
+  }
+  return a;
+}
+
+function applyIntensity(radii) {
+  const k = S.intensity;
+  return radii.map(r => 1.0 + (r - 1.0) * k);
+}
+
+// --- Mode A: raw waveform ---
+function radiiFromWaveform(samples) {
+  const N = S.N;
+  const radii = new Array(N);
+  for (let i = 0; i < N; i++) {
+    const idx = Math.min(Math.floor((i / N) * samples.length), samples.length - 1);
+    radii[i] = 1.0 + samples[idx] * 0.35;
+  }
+  return circularSmooth(radii, 3);
+}
+
+// --- Mode E: tanh-damped waveform ---
+function radiiFromWaveformDamped(samples) {
+  const N = S.N;
+  const scale = 0.35; // same linear scale as mode A
+  const maxDev = 0.25; // tanh caps deviation here
+  const radii = new Array(N);
+  for (let i = 0; i < N; i++) {
+    const idx = Math.min(Math.floor((i / N) * samples.length), samples.length - 1);
+    const v = samples[idx] * scale; // scaled like mode A
+    radii[i] = 1.0 + maxDev * Math.tanh(v / maxDev);
+  }
+  return circularSmooth(radii, 3);
+}
+
+// --- Mode B: spectrum ---
+function radiiFromSpectrum(freqData) {
+  const N = S.N;
+  const radii = new Array(N);
+  const bins = Math.floor(freqData.length / 3);
+  for (let i = 0; i < N; i++) {
+    const idx = Math.min(Math.floor((i / N) * bins), bins - 1);
+    radii[i] = 1.0 + (freqData[idx] / 255 - 0.3) * 0.4;
+  }
+  return circularSmooth(radii, 6);
+}
+
+// --- Mode C: formant ---
+function radiiFromFormant(freqData, sr) {
+  const N = S.N;
+  const radii = new Array(N).fill(1.0);
+  const binHz = sr / 2 / freqData.length;
+  const peaks = findFormantPeaks(freqData, binHz, 200, 3500, 3);
+
+  for (const pk of peaks) {
+    const norm = (pk.freq - 200) / 3300;
+    const ac = norm * Math.PI * 2;
+    const lw = 0.6 + (1 - pk.strength) * 0.4;
+    const lh = 0.15 + pk.strength * 0.35;
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      let d = Math.abs(a - ac);
+      if (d > Math.PI) d = Math.PI * 2 - d;
+      radii[i] += lh * Math.exp(-(d * d) / (2 * lw * lw));
+    }
+  }
+  const mx = Math.max(...radii);
+  if (mx > 1.5) { const s = 1.5 / mx; for (let i = 0; i < N; i++) radii[i] = 1 + (radii[i] - 1) * s; }
+  return circularSmooth(radii, 6);
+}
+
+function findFormantPeaks(freqData, binHz, minHz, maxHz, count) {
+  const minBin = Math.floor(minHz / binHz);
+  const maxBin = Math.floor(maxHz / binHz);
+  const peaks = [];
+  for (let i = minBin + 2; i < maxBin - 2; i++) {
+    const v = freqData[i];
+    if (v > freqData[i-1] && v > freqData[i-2] && v > freqData[i+1] && v > freqData[i+2] && v > 80) {
+      peaks.push({ bin: i, freq: i * binHz, strength: v / 255 });
+    }
+  }
+  peaks.sort((a, b) => b.strength - a.strength);
+  return peaks.slice(0, count);
+}
+
+// --- Mode D: composite ---
+function radiiFromComposite(freqData, timeData, sr) {
+  const N = S.N;
+  const radii = new Array(N);
+
+  const f0 = estimatePitch(timeData, sr);
+  const f0n = f0 ? Math.min(1, Math.max(0, (f0 - 80) / 320)) : 0.5;
+  const sizeScale = 0.85 + f0n * 0.25;
+
+  let sumW = 0, sum = 0;
+  for (let i = 0; i < freqData.length; i++) { sumW += freqData[i] * i; sum += freqData[i]; }
+  const centroid = sum > 0 ? sumW / sum / freqData.length : 0.3;
+  const asymAngle = centroid * Math.PI * 2;
+  const asymStr = Math.min(0.18, Math.abs(centroid - 0.3) * 0.6);
+
+  const bins = Math.floor(freqData.length / 3);
+  let mean = 0;
+  for (let i = 0; i < bins; i++) mean += freqData[i];
+  mean /= bins;
+  let variance = 0;
+  for (let i = 0; i < bins; i++) variance += (freqData[i] - mean) ** 2;
+  const roughness = Math.min(0.25, Math.sqrt(variance / bins) / 255 * 0.6);
+
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    let r = sizeScale + Math.cos(a - asymAngle) * asymStr;
+    const idx = Math.min(Math.floor((i / N) * bins), bins - 1);
+    r += (freqData[idx] / 255 - 0.4) * roughness;
+    radii[i] = r;
+  }
+  return circularSmooth(radii, 5);
+}
+
+function estimatePitch(timeData, sr) {
+  const N = timeData.length;
+  const buf = new Float32Array(N);
+  for (let i = 0; i < N; i++) buf[i] = (timeData[i] - 128) / 128;
+  let bestOff = -1, bestCorr = 0;
+  const minOff = Math.floor(sr / 400);
+  const maxOff = Math.min(Math.floor(sr / 80), N - 1);
+  for (let off = minOff; off <= maxOff; off++) {
+    let c = 0;
+    for (let i = 0; i < N - off; i++) c += buf[i] * buf[i + off];
+    c /= (N - off);
+    if (c > bestCorr) { bestCorr = c; bestOff = off; }
+  }
+  return (bestCorr < 0.3 || bestOff < 0) ? null : sr / bestOff;
+}
+
+// --- Dispatch ---
+function computeRadiiForFrame(mode, freqData, timeData, sr) {
+  if (mode === 'A') return radiiFromWaveform(timeData);
+  if (mode === 'E') return radiiFromWaveformDamped(timeData);
+  if (mode === 'B') return radiiFromSpectrum(freqData);
+  if (mode === 'C') return radiiFromFormant(freqData, sr);
+  return radiiFromComposite(freqData, timeData, sr);
+}
+
+// =====================================================================
+//  5. RECOMPUTE FROM STORED DATA
+// =====================================================================
+
+function recompute() {
+  if (!S.samples || S.samples.length === 0) return;
+
+  // time range in samples
+  const totalSamples = S.samples.length;
+  const startSample = Math.floor(S.rangeStart * totalSamples);
+  const endSample = Math.max(startSample + 1, Math.floor(S.rangeEnd * totalSamples));
+
+  let radii;
+
+  if (S.mode === 'A' || S.mode === 'E') {
+    // slice time range, map directly
+    const slice = S.samples.subarray(startSample, endSample);
+    const raw = S.mode === 'A' ? radiiFromWaveform(slice) : radiiFromWaveformDamped(slice);
+    radii = applyIntensity(raw);
+    S.displayRadii = null;
+  } else {
+    // average FFT frames within selected time range
+    const framesInRange = S.frames.filter(f =>
+      f.sampleIndex >= startSample && f.sampleIndex < endSample
+    );
+
+    if (framesInRange.length === 0) {
+      // fallback: use all frames
+      radii = new Array(S.N).fill(1.0);
+    } else {
+      // average radii across selected frames
+      const sum = new Array(S.N).fill(0);
+      for (const f of framesInRange) {
+        const r = computeRadiiForFrame(S.mode, f.freqData, f.timeData, S.sampleRate);
+        for (let i = 0; i < S.N; i++) sum[i] += r[i];
+      }
+      const avg = sum.map(v => v / framesInRange.length);
+      S.displayRadii = avg;
+      radii = applyIntensity(avg);
+    }
+  }
+
+  for (let i = 0; i < S.N; i++) S.targetRadii[i] = radii[i];
+  updateTimeline();
+  updateTimelineInfo();
+}
+
+// =====================================================================
+//  6. RECORDING
+// =====================================================================
+
+async function startRecording() {
+  try {
+    S.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    S.stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+    S.source = S.audioCtx.createMediaStreamSource(S.stream);
+
+    S.analyser = S.audioCtx.createAnalyser();
+    S.analyser.fftSize = 2048;
+    S.analyser.smoothingTimeConstant = 0.85;
+    S.source.connect(S.analyser);
+
+    // capture all samples
+    S.scriptNode = S.audioCtx.createScriptProcessor(4096, 1, 1);
+    S.source.connect(S.scriptNode);
+    S.scriptNode.connect(S.audioCtx.destination);
+    S.chunks = [];
+    S.liveSampleCount = 0;
+    S.scriptNode.onaudioprocess = (e) => {
+      const data = new Float32Array(e.inputBuffer.getChannelData(0));
+      S.chunks.push(data);
+      S.liveSampleCount += data.length;
+    };
+
+    S.frames = [];
+    S.samples = null;
+    S.displayRadii = null;
+    S.sampleRate = S.audioCtx.sampleRate;
+    S.rangeStart = 0;
+    S.rangeEnd = 1;
+    updateRangeUI();
+
+    S.recording = true;
+    document.getElementById('recordBtn').textContent = '録音停止';
+    document.getElementById('recordBtn').classList.add('recording');
+    document.getElementById('recordBtn').classList.remove('primary');
+    document.getElementById('recIndicator').classList.add('active');
+    document.getElementById('status').textContent = '名前を発声してください…';
+    document.getElementById('stageMeta').textContent = '— 録音中 —';
+    document.getElementById('timelineLabel').textContent = 'WAVEFORM';
+
+    analyzeLoop();
+  } catch (err) {
+    console.error(err);
+    document.getElementById('status').textContent = 'マイクのアクセスに失敗しました';
+  }
+}
+
+function stopRecording() {
+  S.recording = false;
+  if (S.scriptNode) { S.scriptNode.disconnect(); S.scriptNode = null; }
+  if (S.stream) S.stream.getTracks().forEach(t => t.stop());
+
+  // concatenate chunks
+  const totalLen = S.chunks.reduce((s, c) => s + c.length, 0);
+  if (totalLen > 0) {
+    S.samples = new Float32Array(totalLen);
+    let off = 0;
+    for (const c of S.chunks) { S.samples.set(c, off); off += c.length; }
+    S.chunks = [];
+
+    // switch to mode A
+    S.mode = 'A';
+    document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector('.mode-tab[data-mode="A"]').classList.add('active');
+    const d = modeDescriptions['A'];
+    document.getElementById('modeDescription').innerHTML = `<strong>${d.title}</strong>${d.body}`;
+
+    recompute();
+    document.getElementById('stageMeta').textContent = '— 印 —';
+    document.getElementById('status').textContent = '声から印が刻まれました';
+  } else {
+    document.getElementById('status').textContent = '声を検出できませんでした';
+    for (let i = 0; i < S.N; i++) S.targetRadii[i] = 1.0;
+  }
+
+  if (S.audioCtx) S.audioCtx.close();
+
+  document.getElementById('recordBtn').textContent = 'もう一度録音';
+  document.getElementById('recordBtn').classList.remove('recording');
+  document.getElementById('recordBtn').classList.add('primary');
+  document.getElementById('recIndicator').classList.remove('active');
+  updateTimelineLabel();
+}
+
+function analyzeLoop() {
+  if (!S.recording) return;
+  const freqData = new Uint8Array(S.analyser.frequencyBinCount);
+  const timeData = new Uint8Array(S.analyser.fftSize);
+  S.analyser.getByteFrequencyData(freqData);
+  S.analyser.getByteTimeDomainData(timeData);
+  S.lastTimeData = timeData;
+
+  // RMS noise gate
+  let rms = 0;
+  for (let i = 0; i < timeData.length; i++) { const v = (timeData[i] - 128) / 128; rms += v * v; }
+  rms = Math.sqrt(rms / timeData.length);
+
+  if (rms > S.noiseFloor) {
+    S.frames.push({
+      freqData: new Uint8Array(freqData),
+      timeData: new Uint8Array(timeData),
+      sampleIndex: S.liveSampleCount,
+    });
+
+    // live preview
+    const r = computeRadiiForFrame(S.mode, freqData, timeData, S.audioCtx.sampleRate);
+    const applied = applyIntensity(r);
+    for (let i = 0; i < S.N; i++) S.targetRadii[i] = applied[i];
+  }
+
+  updateTimeline();
+  requestAnimationFrame(analyzeLoop);
+}
+
+// =====================================================================
+//  7. ANIMATION
+// =====================================================================
+
+function animate() {
+  const k = S.recording ? 0.12 : 0.08;
+  for (let i = 0; i < S.N; i++) {
+    S.currentRadii[i] += (S.targetRadii[i] - S.currentRadii[i]) * k;
+  }
+  drawSeal();
+  requestAnimationFrame(animate);
+}
+
+// =====================================================================
+//  8. RANGE SELECTION
+// =====================================================================
+
+const rangeHandleL = document.getElementById('rangeHandleL');
+const rangeHandleR = document.getElementById('rangeHandleR');
+const rangeMaskL = document.getElementById('rangeMaskL');
+const rangeMaskR = document.getElementById('rangeMaskR');
+const tlContainer = document.getElementById('timelineContainer');
+
+function updateRangeUI() {
+  const lp = (S.rangeStart * 100).toFixed(1);
+  const rp = (S.rangeEnd * 100).toFixed(1);
+  rangeHandleL.style.left = lp + '%';
+  rangeHandleR.style.left = rp + '%';
+  rangeMaskL.style.width = lp + '%';
+  rangeMaskR.style.width = (100 - parseFloat(rp)) + '%';
+  updateTimelineInfo();
+}
+
+function updateTimelineInfo() {
+  if (S.samples) {
+    const dur = S.samples.length / S.sampleRate;
+    const lo = (S.rangeStart * dur).toFixed(1);
+    const hi = (S.rangeEnd * dur).toFixed(1);
+    document.getElementById('timelineInfo').textContent = lo + 's - ' + hi + 's';
+  } else {
+    document.getElementById('timelineInfo').textContent = '—';
+  }
+}
+
+function updateTimelineLabel() {
+  if (!S.recording && S.samples && S.mode !== 'A' && S.mode !== 'E') {
+    document.getElementById('timelineLabel').textContent = 'RADII — ' + S.mode;
+  } else {
+    document.getElementById('timelineLabel').textContent = 'WAVEFORM';
+  }
+}
+
+let dragTarget = null;
+
+function onDragStart(e) {
+  if (S.recording || !S.samples) return;
+  e.preventDefault();
+  dragTarget = e.target;
+  document.addEventListener('mousemove', onDragMove);
+  document.addEventListener('mouseup', onDragEnd);
+  document.addEventListener('touchmove', onDragMove, { passive: false });
+  document.addEventListener('touchend', onDragEnd);
+}
+
+function onDragMove(e) {
+  if (!dragTarget) return;
+  e.preventDefault();
+  const rect = tlContainer.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  let pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+
+  if (dragTarget === rangeHandleL) {
+    S.rangeStart = Math.min(pct, S.rangeEnd - 0.02);
+  } else {
+    S.rangeEnd = Math.max(pct, S.rangeStart + 0.02);
+  }
+  updateRangeUI();
+  updateTimeline(); // visual update only during drag
+}
+
+function onDragEnd() {
+  if (dragTarget) recompute(); // compute on release
+  dragTarget = null;
+  document.removeEventListener('mousemove', onDragMove);
+  document.removeEventListener('mouseup', onDragEnd);
+  document.removeEventListener('touchmove', onDragMove);
+  document.removeEventListener('touchend', onDragEnd);
+}
+
+rangeHandleL.addEventListener('mousedown', onDragStart);
+rangeHandleR.addEventListener('mousedown', onDragStart);
+rangeHandleL.addEventListener('touchstart', onDragStart, { passive: false });
+rangeHandleR.addEventListener('touchstart', onDragStart, { passive: false });
+
+// =====================================================================
+//  9. UI WIRING
+// =====================================================================
+
+const modeDescriptions = {
+  A: { title: 'A — 生波形', body: '時間波形をそのまま円周にマッピングする。発声の瞬間の波形がダイレクトに形になる。毎回異なる形が出やすいが、声の「生々しさ」がそのまま残る。' },
+  E: { title: 'E — 制波（tanh 抑制）', body: '生波形に tanh 関数で非線形な抑制をかける。小さな揺らぎはそのまま通し、大きな振幅は頭打ちにする。尖りを抑えつつ波形の個性を残す。' },
+  B: { title: 'B — スペクトル（倍音構成）', body: '円周に低音から高音までを配置し、各周波数の強さで半径が決まる。声質の豊かさ＝輪郭の複雑さ。同じ名前でも人によって全く違う形になる、声紋的なアプローチ。' },
+  C: { title: 'C — フォルマント（声道の共鳴）', body: '声道の共鳴ピークを検出し、それぞれを大きな膨らみ（ローブ）として配置する。発音した母音や声道の長さが反映され、なめらかで落ち着いた数個の凹凸を持つ形になる。' },
+  D: { title: 'D — 複合（声の高さ・明るさ・粗さ）', body: '基本周波数（F0）→ 全体サイズ、スペクトル重心 → 偏り、倍音の分散 → 輪郭の粗さ。声の複数の特徴を同時に形へ翻訳する、最も総合的なモード。' },
+};
+
+document.getElementById('modeTabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.mode-tab');
+  if (!btn) return;
+  document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  S.mode = btn.dataset.mode;
+  const d = modeDescriptions[S.mode];
+  document.getElementById('modeDescription').innerHTML = `<strong>${d.title}</strong>${d.body}`;
+  updateTimelineLabel();
+  if (!S.recording && S.samples) recompute();
+});
+
+document.getElementById('intensitySlider').addEventListener('input', (e) => {
+  S.intensity = e.target.value / 100;
+  document.getElementById('intensityValue').textContent = e.target.value + '%';
+  if (!S.recording && S.samples) recompute();
+});
+
+document.getElementById('resolutionSlider').addEventListener('input', (e) => {
+  const newN = Math.pow(2, parseInt(e.target.value));
+  document.getElementById('resolutionValue').textContent = newN;
+  S.N = newN;
+  S.currentRadii = new Array(newN).fill(1.0);
+  S.targetRadii = new Array(newN).fill(1.0);
+  if (!S.recording && S.samples) recompute();
+});
+
+document.getElementById('recordBtn').addEventListener('click', () => {
+  if (S.recording) stopRecording(); else startRecording();
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  for (let i = 0; i < S.N; i++) S.targetRadii[i] = 1.0;
+  S.samples = null;
+  S.frames = [];
+  S.displayRadii = null;
+  document.getElementById('stageMeta').textContent = '— 真円 —';
+  document.getElementById('status').textContent = 'マイクの使用を許可してください';
+  updateTimeline();
+});
+
+// =====================================================================
+//  10. SVG EXPORT
+// =====================================================================
+
+// font for outline export (loaded on demand)
+let loadedFont = null;
+const FONT_URL = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/shipporimincho/ShipporiMincho-ExtraBold.ttf';
+
+async function loadFont() {
+  if (loadedFont) return loadedFont;
+  loadedFont = await opentype.load(FONT_URL);
+  return loadedFont;
+}
+
+function buildSealPath(vb) {
+  const cx = vb / 2, cy = vb / 2;
+  const baseR = vb * 0.42;
+  const N = S.N;
+  const pts = [];
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2 - Math.PI / 2;
+    const r = baseR * S.currentRadii[i];
+    pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+  }
+  const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const m0 = mid(pts[N - 1], pts[0]);
+  let d = `M ${m0.x.toFixed(2)} ${m0.y.toFixed(2)}`;
+  for (let i = 0; i < N; i++) {
+    const p = pts[i];
+    const m = mid(p, pts[(i + 1) % N]);
+    d += ` Q ${p.x.toFixed(2)} ${p.y.toFixed(2)} ${m.x.toFixed(2)} ${m.y.toFixed(2)}`;
+  }
+  d += ' Z';
+  return d;
+}
+
+function buildNameOutlinePaths(font, vb) {
+  const name = (document.getElementById('nameInput').value || '').slice(0, 4);
+  if (!name) return '';
+  const cx = vb / 2, cy = vb / 2;
+  const baseR = vb * 0.42;
+  const color = '#c8331c';
+
+  // character positions: same layout as drawName
+  const chars = [];
+  if (name.length === 1) {
+    chars.push({ ch: name[0], x: cx, y: cy, fs: baseR * 0.55 });
+  } else if (name.length === 2) {
+    const fs = baseR * 0.72;
+    chars.push({ ch: name[0], x: cx, y: cy - fs * 0.42, fs });
+    chars.push({ ch: name[1], x: cx, y: cy + fs * 0.42, fs });
+  } else if (name.length === 3) {
+    const fs = baseR * 0.5;
+    chars.push({ ch: name[0], x: cx, y: cy - fs * 0.85, fs });
+    chars.push({ ch: name[1], x: cx, y: cy, fs });
+    chars.push({ ch: name[2], x: cx, y: cy + fs * 0.85, fs });
+  } else {
+    const fs = baseR * 0.58;
+    const off = fs * 0.5;
+    chars.push({ ch: name[0], x: cx + off, y: cy - off, fs });
+    chars.push({ ch: name[1], x: cx - off, y: cy - off, fs });
+    chars.push({ ch: name[2], x: cx + off, y: cy + off, fs });
+    chars.push({ ch: name[3], x: cx - off, y: cy + off, fs });
+  }
+
+  let paths = '';
+  for (const c of chars) {
+    const glyph = font.charToGlyph(c.ch);
+    const scale = c.fs / font.unitsPerEm;
+    const w = glyph.advanceWidth * scale;
+    // opentype y-axis is inverted (baseline at bottom), so we flip
+    const otPath = glyph.getPath(c.x - w / 2, c.y + c.fs * 0.35, c.fs);
+    const svgD = otPath.toPathData(2);
+    paths += `  <path d="${svgD}" fill="${color}"/>\n`;
+  }
+  return paths;
+}
+
+async function exportSVG(includeText) {
+  const vb = 1000; // viewBox units
+  const sizeMM = 15;
+  const sealPath = buildSealPath(vb);
+  // stroke width scaled: 1.5px at 800px original ≈ 1.875 in 1000 units
+  const strokeW = (1.5 / 800 * vb).toFixed(2);
+
+  let textPaths = '';
+  if (includeText) {
+    try {
+      const font = await loadFont();
+      textPaths = buildNameOutlinePaths(font, vb);
+    } catch (e) {
+      console.error('Font load failed:', e);
+      document.getElementById('status').textContent = 'フォント読み込みに失敗しました';
+      return;
+    }
+  }
+
+  // guide square (bounding box around the seal area)
+  const guide = `  <rect x="0" y="0" width="${vb}" height="${vb}" fill="none" stroke="#ccc" stroke-width="0.5" stroke-dasharray="4 4"/>`;
+
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vb} ${vb}" width="${sizeMM}mm" height="${sizeMM}mm">
+${guide}
+  <path d="${sealPath}" fill="none" stroke="#c8331c" stroke-width="${strokeW}"/>
+${textPaths}</svg>`;
+
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = includeText ? 'seal-with-text.svg' : 'seal-outline.svg';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById('exportOutline').addEventListener('click', () => exportSVG(false));
+document.getElementById('exportWithText').addEventListener('click', () => exportSVG(true));
+
+// =====================================================================
+//  11. INIT
+// =====================================================================
+
+resizeSealCanvas();
+resizeTimelineCanvas();
+window.addEventListener('resize', () => { resizeSealCanvas(); resizeTimelineCanvas(); });
+updateRangeUI();
+updateTimeline();
+animate();
+</script>
+</body>
+</html>
