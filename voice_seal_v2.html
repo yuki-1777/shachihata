@@ -454,6 +454,12 @@
       <button data-val="1024">1024</button>
     </div>
 
+    <h2>オフセット方向</h2>
+    <div class="toggle" id="directionToggle">
+      <button data-val="both" class="active">両側</button>
+      <button data-val="outward">外向きのみ</button>
+    </div>
+
     <h2>境界処理</h2>
     <div class="toggle" id="boundaryToggle">
       <button data-val="fade">フェード</button>
@@ -519,6 +525,7 @@ const state = {
   name: '',
   slots: [],
   resolution: 512,
+  direction: 'both',    // 'both' | 'outward'
   boundary: 'sharp',    // 'fade' | 'sharp'
   variationMm: 2.0,     // max amplitude in millimeters (outward + inward)
   fadePct: 0.08,
@@ -789,6 +796,7 @@ function setupToggle(id, key, onChange) {
 setupToggle('resolutionToggle', 'resolution');
 setupToggle('boundaryToggle', 'boundary');
 setupToggle('viewToggle', 'view');
+setupToggle('directionToggle', 'direction');
 setupToggle('snapModeToggle', 'snapMode');
 setupToggle('connectToggle', 'connect');
 setupToggle('spacingToggle', 'spacing');
@@ -1103,6 +1111,13 @@ function drawShape() {
 
   const data = buildSectorOffsets();
   const hasAny = data && data.sectors.some(s => s);
+  // Apply outward-only direction by taking absolute values of samples
+  if (hasAny && state.direction === 'outward') {
+    for (const sec of data.sectors) {
+      if (!sec) continue;
+      for (let i = 0; i < sec.samples.length; i++) sec.samples[i] = Math.abs(sec.samples[i]);
+    }
+  }
 
   if (state.view === 'linear') {
     drawLinearView(W, H, data && data.sectors, hasAny);
@@ -1495,6 +1510,12 @@ document.getElementById('exportSvg').addEventListener('click', () => {
   const data = buildSectorOffsets();
   if (!data || !data.sectors.some(s => s)) return;
   const sectors = data.sectors;
+  if (state.direction === 'outward') {
+    for (const sec of sectors) {
+      if (!sec) continue;
+      for (let i = 0; i < sec.samples.length; i++) sec.samples[i] = Math.abs(sec.samples[i]);
+    }
+  }
   // SVG in mm units so it imports at correct physical size in CAD/3D tools
   const padMm = 2;
   const sizeMm = (SEAL_DIAMETER_MM + state.variationMm * 2 + padMm * 2);
@@ -2453,6 +2474,7 @@ function syncUIFromState() {
   setActive('connectToggle', state.connect);
   setActive('spacingToggle', state.spacing);
   setActive('normToggle', state.norm);
+  setActive('directionToggle', state.direction);
 
   // Sliders
   document.getElementById('variation').value = state.variationMm;
