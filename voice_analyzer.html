@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>声の分析ラボ</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Helvetica Neue", sans-serif;
+    background: #fafafa;
+    color: #222;
+    font-size: 15px;
+    line-height: 1.65;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 300px 1fr 340px;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+  }
+  header {
+    grid-column: 1 / -1;
+    padding: 12px 24px;
+    background: #fff;
+    border-bottom: 1px solid #e5e5e5;
+  }
+  header h1 {
+    font-size: 19px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  header p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: #888;
+  }
+
+  aside {
+    padding: 16px;
+    background: #fff;
+    overflow-y: auto;
+  }
+  aside.left { border-right: 1px solid #e5e5e5; }
+  aside.right { border-left: 1px solid #e5e5e5; }
+
+  main {
+    padding: 12px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    background: #fafafa;
+  }
+
+  h2 {
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin: 20px 0 10px;
+  }
+  h2:first-child { margin-top: 0; }
+
+  .hint {
+    font-size: 12px;
+    color: #888;
+    line-height: 1.55;
+    margin-top: 6px;
+  }
+
+  .rec-btn {
+    width: 100%;
+    padding: 14px;
+    background: #222;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: inherit;
+    user-select: none;
+  }
+  .rec-btn.recording { background: #dc2626; }
+  .rec-btn:disabled { opacity: 0.5; }
+
+  .ctrl-row { margin-bottom: 12px; }
+  .ctrl-row label {
+    display: block;
+    font-size: 13px;
+    color: #555;
+    margin-bottom: 6px;
+  }
+  select, input[type="range"] {
+    width: 100%;
+    padding: 6px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .val {
+    float: right;
+    color: #2563eb;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sample-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .sample-btns button {
+    flex: 1 0 auto;
+    padding: 6px 10px;
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .sample-btns button:hover { background: #e0e0e0; }
+
+  /* Visualization panels */
+  section.vis {
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    padding: 10px 14px 12px;
+  }
+  .vis-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .vis-head h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0;
+    color: #222;
+  }
+  .vis-head h3 .time-label {
+    font-size: 13px;
+    color: #888;
+    font-weight: 400;
+    margin-left: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  .help-btn {
+    background: #f0f0f0;
+    color: #555;
+    border: 1px solid #ddd;
+    border-radius: 50%;
+    width: 26px;
+    height: 26px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    line-height: 1;
+    padding: 0;
+  }
+  .help-btn:hover { background: #e0e0e0; }
+  .vis-help {
+    font-size: 13px;
+    color: #666;
+    line-height: 1.65;
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    background: #f9fafb;
+    border-radius: 4px;
+    border-left: 3px solid #2563eb;
+  }
+  canvas.vis-canvas {
+    display: block;
+    width: 100%;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 4px;
+    cursor: crosshair;
+  }
+
+  /* Features panel */
+  .feat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+    gap: 8px;
+  }
+  .feat-row .label {
+    font-size: 14px;
+    color: #444;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .feat-row .label .mini-help {
+    background: #f0f0f0;
+    color: #888;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0;
+    font-family: inherit;
+  }
+  .feat-row .label .mini-help:hover { background: #e0e0e0; color: #555; }
+  .feat-row .val {
+    font-size: 15px;
+    color: #2563eb;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    float: none;
+  }
+  .feat-row .val.muted { color: #999; }
+
+  #previewCanvas {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 4px;
+    margin-top: 8px;
+  }
+
+  /* Help modal */
+  .modal-bg {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-bg.show { display: flex; }
+  .modal {
+    background: #fff;
+    padding: 24px 28px;
+    border-radius: 8px;
+    width: min(90vw, 520px);
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  .modal h3 {
+    margin: 0 0 14px;
+    font-size: 18px;
+  }
+  .modal p {
+    margin: 0 0 12px;
+    font-size: 15px;
+    line-height: 1.75;
+    color: #333;
+  }
+  .modal .example {
+    background: #f9fafb;
+    border-left: 3px solid #2563eb;
+    padding: 10px 14px;
+    margin: 10px 0;
+    font-size: 14px;
+    color: #555;
+  }
+  .modal-close {
+    float: right;
+    background: #f0f0f0;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 16px;
+    font-family: inherit;
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<header>
+  <h1>声の分析ラボ</h1>
+  <p>マイクで録音した声を「波形」「スペクトル」「スペクトログラム」の3つの視点で観察するツール。各専門用語は <span style="display:inline-block;background:#f0f0f0;border-radius:50%;width:14px;height:14px;text-align:center;font-size:8px;line-height:14px;font-weight:600;color:#888;">？</span> ボタンで解説が出ます。</p>
+</header>
+
+
+<aside class="left">
+  <h2>録音</h2>
+  <button class="rec-btn" id="recBtn">押している間 録音</button>
+  <div class="hint">マイクの許可を求められます。「あー」「いー」「うー」と伸ばしたり、「さしすせそ」「だ」など子音を試してみよう。<br><kbd style="background:#eee;border:1px solid #ccc;border-radius:3px;padding:1px 5px;font-size:10px;">スペース</kbd> でも録音できます。</div>
+
+  <div class="sample-btns">
+    <button data-vowel="a">あ</button>
+    <button data-vowel="i">い</button>
+    <button data-vowel="u">う</button>
+    <button data-vowel="e">え</button>
+    <button data-vowel="o">お</button>
+  </div>
+  <div class="hint">上のボタンで合成音（テスト用の擬似母音）を解析できます。</div>
+
+  <h2>解析パラメータ</h2>
+
+  <div class="ctrl-row">
+    <label>① FFTサイズ <span class="val" id="fftSizeVal">1024</span></label>
+    <select id="fftSizeSel">
+      <option>256</option>
+      <option>512</option>
+      <option selected>1024</option>
+      <option>2048</option>
+      <option>4096</option>
+    </select>
+    <div class="hint">
+      <b>何？</b> 一度に解析する音のかたまりの長さ（サンプル数）。<br>
+      <b>反映先</b> ②スペクトル・③スペクトログラム・右の全特徴量<br>
+      <b>大きい</b>：周波数が細かく見える（③で縦の縞がくっきり）／時間がボヤける<br>
+      <b>小さい</b>：時間の変化に敏感（③で横の変化がくっきり）／周波数の山がボヤける<br>
+      標準は1024（≈23ms）。「あ→い」のような遷移を見たければ小さく、母音の中身を細かく見たければ大きく。
+    </div>
+  </div>
+
+  <div class="ctrl-row">
+    <label>② 周波数軸</label>
+    <select id="freqScaleSel">
+      <option value="linear">リニア（等間隔）</option>
+      <option value="log" selected>対数（声向き）</option>
+    </select>
+    <div class="hint">
+      <b>反映先</b> ②スペクトルの横軸 ＆ ③スペクトログラムの縦軸<br>
+      <b>リニア</b>：1k, 2k, 3k…と等間隔<br>
+      <b>対数</b>：100, 1k, 10kと倍々間隔。低域が広く表示されるので、F0やフォルマントが見やすい
+    </div>
+  </div>
+
+  <div class="ctrl-row">
+    <label>③ 強さの表示</label>
+    <select id="magScaleSel">
+      <option value="db" selected>dB（対数）</option>
+      <option value="linear">リニア</option>
+    </select>
+    <div class="hint">
+      <b>反映先</b> ②スペクトルの縦軸 ＆ ③スペクトログラムの色の濃さ<br>
+      <b>dB</b>：人の聴感に近い。小さい音も見える<br>
+      <b>リニア</b>：大きい音だけが目立ち、小さい音は埋もれる
+    </div>
+  </div>
+
+  <div class="ctrl-row">
+    <label>④ 周波数の上限 <span class="val" id="fmaxVal">8000Hz</span></label>
+    <input type="range" id="fmaxSlider" min="2000" max="16000" step="500" value="8000">
+    <div class="hint">
+      <b>反映先</b> ②スペクトルの右端 ＆ ③スペクトログラムの上端<br>
+      下げると低域を拡大して見られる（フォルマントを観察）。<br>
+      上げると高音域（「さ」「し」の摩擦音）まで含めて見える。
+    </div>
+  </div>
+</aside>
+
+<main>
+  <!-- ① Waveform -->
+  <section class="vis">
+    <div class="vis-head">
+      <h3>① 波形 <span class="time-label" id="cursorTimeLabel"></span></h3>
+      <button class="help-btn" data-help="waveform">？</button>
+    </div>
+    <div class="vis-help">空気の振動そのもの。横が時間、縦が空気の押し引きの強さ。<b>クリック</b>で「その瞬間」を選ぶと、下のスペクトルがその瞬間の解析結果を表示します。</div>
+    <canvas id="wfCanvas" class="vis-canvas" style="height: 130px;"></canvas>
+  </section>
+
+  <!-- ② Spectrum -->
+  <section class="vis">
+    <div class="vis-head">
+      <h3>② スペクトル（選んだ瞬間の音の中身）</h3>
+      <button class="help-btn" data-help="spectrum">？</button>
+    </div>
+    <div class="vis-help">①で選んだ瞬間に「どの高さの音がどれくらい混ざっているか」のグラフ。<b>山</b>が出ているところが<b>フォルマント</b>。母音は2つの大きな山（F1とF2）の位置で決まります。</div>
+    <canvas id="spCanvas" class="vis-canvas" style="height: 180px;"></canvas>
+  </section>
+
+  <!-- ③ Spectrogram -->
+  <section class="vis">
+    <div class="vis-head">
+      <h3>③ スペクトログラム（全体の見取り図）</h3>
+      <button class="help-btn" data-help="spectrogram">？</button>
+    </div>
+    <div class="vis-help">②のスペクトルを時間方向にずっと並べたもの。<b>横=時間、縦=周波数、色の明るさ=その音の強さ</b>。横に伸びる明るい縞がフォルマント。<b>クリック</b>で時刻を変えられます。</div>
+    <canvas id="sgCanvas" class="vis-canvas" style="height: 220px;"></canvas>
+  </section>
+</main>
+
+<aside class="right">
+  <h2>声の特徴量 <span style="font-size:9px;color:#999;text-transform:none;letter-spacing:0;">（選んだ瞬間）</span></h2>
+  <div class="feat-row">
+    <span class="label">音量（RMS）<button class="mini-help" data-help="rms">?</button></span>
+    <span class="val" id="featRms">-</span>
+  </div>
+  <div class="feat-row">
+    <span class="label">F0（声の高さ）<button class="mini-help" data-help="f0">?</button></span>
+    <span class="val" id="featF0">-</span>
+  </div>
+  <div class="feat-row">
+    <span class="label">F1 <button class="mini-help" data-help="formant">?</button></span>
+    <span class="val" id="featF1">-</span>
+  </div>
+  <div class="feat-row">
+    <span class="label">F2 <button class="mini-help" data-help="formant">?</button></span>
+    <span class="val" id="featF2">-</span>
+  </div>
+  <div class="feat-row">
+    <span class="label">明るさ（重心）<button class="mini-help" data-help="centroid">?</button></span>
+    <span class="val" id="featCentroid">-</span>
+  </div>
+  <div class="feat-row">
+    <span class="label">ZCR <button class="mini-help" data-help="zcr">?</button></span>
+    <span class="val" id="featZcr">-</span>
+  </div>
+  <div class="feat-row">
+    <span class="label">有声/無声 <button class="mini-help" data-help="voiced">?</button></span>
+    <span class="val" id="featVoiced">-</span>
+  </div>
+  <div class="feat-row">
+    <span class="label">推定母音 <button class="mini-help" data-help="vowel">?</button></span>
+    <span class="val" id="featVowel">-</span>
+  </div>
+
+  <h2>1本線プレビュー</h2>
+  <div class="hint" style="margin-bottom:6px;">録音全体のうち選んだ特徴量を、円の半径方向の変化として可視化。「印鑑の輪郭に何を使うか」を試すための場所です。</div>
+  <div class="ctrl-row">
+    <label>線を動かす特徴</label>
+    <select id="previewFeatureSel">
+      <option value="rms">音量（RMS）</option>
+      <option value="f0">声の高さ（F0）</option>
+      <option value="centroid" selected>明るさ（スペクトル重心）</option>
+      <option value="lowEnergy">低域エネルギー（〜800Hz）</option>
+      <option value="midEnergy">中域エネルギー（800-3kHz）</option>
+      <option value="highEnergy">高域エネルギー（3kHz〜）</option>
+      <option value="zcr">ZCR（ザラつき）</option>
+    </select>
+  </div>
+  <div class="ctrl-row">
+    <label>スムージング <span class="val" id="smoothVal">9</span></label>
+    <input type="range" id="smoothSlider" min="1" max="51" step="2" value="9">
+  </div>
+  <canvas id="previewCanvas" width="600" height="600"></canvas>
+
+  <h2>個人性メモ</h2>
+  <div class="hint" style="line-height:1.7;">
+    <b>「その人らしさ」を作る特徴量の整理</b>（印鑑可視化の検討メモ）<br><br>
+    <b>① ピッチ系</b><br>
+    ・F0 平均：声の高さ（男 100-150Hz / 女 200-300Hz）<br>
+    ・F0 範囲：抑揚の幅（棒読み⇄表情豊か）<br>
+    ・F0 変動：揺らぎ量<br><br>
+    <b>② 音色系</b><br>
+    ・スペクトル傾き：右下がり度（息っぽい⇄張った声）<br>
+    ・F3〜F5：声道の長さ・形状で決まる個人固有値<br>
+    ・スペクトル重心平均：明るい⇄こもった<br><br>
+    <b>③ 声質系</b><br>
+    ・HNR：澄んだ音 ⇄ ノイズっぽい音<br>
+    ・ジッター：F0周期の揺らぎ（&lt;1%が健常）<br>
+    ・シマー：振幅の周期揺らぎ<br>
+    ・→ ハスキー / クリアの正体<br><br>
+    <b>④ 時間系</b><br>
+    ・発話速度、ポーズ長、フォルマント遷移速度<br><br>
+    <b>機械学習</b>では MFCC（13-40次元）の分布で個人識別。①〜③の情報圧縮。<br><br>
+    <b>印鑑への割り当て案</b><br>
+    ・F0平均 → 基本サイズ<br>
+    ・F0範囲 → うねりの大きさ<br>
+    ・スペクトル傾き／重心 → 線の質感<br>
+    ・HNR → 線の滑らかさ<br>
+    ・時間構造 → セクタ分割や濃淡<br><br>
+    一般則：<b>音色（②）が一番個人性が強く、ピッチ（①）は印象を決める</b>
+  </div>
+
+  <h2>子音タイプ メモ</h2>
+  <div class="hint" style="line-height:1.7;">
+    <b>50音の子音分類</b>（IPA・出典: Wikipedia Japanese phonology）<br><br>
+    <b>破裂音</b> ：か・た・て・と・ぱ・が・だ・で・ど・ば<br>
+    <b>破擦音</b> ：ち・つ・ぢ・づ（じ・ず も語頭で破擦化）<br>
+    <b>摩擦音</b> ：さ・し・す・せ・そ・は・ひ・ふ・へ・ほ・ざ・じ・ず・ぜ・ぞ<br>
+    <b>鼻音</b>　 ：な・に・ぬ・ね・の・ま・み・む・め・も・ん<br>
+    <b>流音/弾き</b>：ら・り・る・れ・ろ<br>
+    <b>半母音</b> ：や・ゆ・よ・わ<br>
+    <b>母音単独</b>：あ・い・う・え・お<br><br>
+    <b>注意点</b><br>
+    ・<b>た行は混在</b>：た/て/と=破裂、ち=[tɕi]破擦、つ=[tsɯ]破擦<br>
+    ・<b>だ行も混在</b>：だ/で/ど=破裂、ぢ/づ=破擦（じ・ずと同音）<br>
+    ・<b>さ行の し は [ɕi]</b>（口蓋化）／<b>は行の ひ [çi]・ふ [ɸɯ]</b> で調音位置が変わる<br>
+    ・<b>が行</b>は語中で鼻濁音 [ŋ] になる方言あり<br><br>
+    <b>音響的検出のヒント</b><br>
+    ・摩擦音：ZCR高 + 高域エネルギー優位<br>
+    ・破裂音：短い無音 → 急な振幅ジャンプ<br>
+    ・破擦音：破裂音の立ち上がり + 摩擦音の尾（二段構造）<br>
+    ・鼻音：F0あり + 高域がやけに弱い<br>
+    ・有声/無声：F0の有無
+  </div>
+</aside>
+
+</div>
+
+<!-- Help modal -->
+<div class="modal-bg" id="helpModal">
+  <div class="modal">
+    <button class="modal-close" id="helpClose">×</button>
+    <div id="helpContent"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// Help content（中学生でも分かる説明）
+// ============================================================
+const HELP = {
+  waveform: {
+    title: '波形（はけい）',
+    body: [
+      '空気の押したり引いたりの強さを、時間の流れに沿ってグラフにしたもの。',
+      '声は空気の振動なので、声を録音すると波形ができる。',
+      '<b>横軸</b>＝時間／<b>縦軸</b>＝空気の押し引きの強さ',
+      '<div class="example">大きい声＝波が大きい／高い声＝波が細かく振動する</div>',
+    ],
+  },
+  spectrum: {
+    title: 'スペクトル',
+    body: [
+      'ある<b>一瞬</b>の音に、どの高さの音がどれくらい混ざっているかを表したグラフ。',
+      '人の声は単純な1つの音ではなく、たくさんの音が混ざってできています。',
+      '<b>横軸</b>＝音の高さ（周波数 Hz）／<b>縦軸</b>＝その音の強さ',
+      '<div class="example">フォルマント（山）の位置を見ると、母音が「あ」か「い」か「う」かが分かる。</div>',
+    ],
+  },
+  spectrogram: {
+    title: 'スペクトログラム',
+    body: [
+      'スペクトル（瞬間の音の中身）を、時間ごとにずっと並べて1枚の画像にしたもの。',
+      '<b>横軸</b>＝時間／<b>縦軸</b>＝音の高さ／<b>色の明るさ</b>＝その音の強さ',
+      '横に伸びる明るい縞模様が見えたら、それがフォルマント。',
+      '<div class="example">「あいうえお」と続けて言うと、縞の位置が時間とともに動くのが見える。</div>',
+    ],
+  },
+  rms: {
+    title: 'RMS（音量）',
+    body: [
+      'その瞬間の<b>音量</b>のこと。波形の振れ幅の平均をうまく計算した値。',
+      '人間が「大きい声」「小さい声」と感じる感覚に近い指標。',
+    ],
+  },
+  f0: {
+    title: 'F0（基本周波数）',
+    body: [
+      '声の<b>高さ</b>のこと。1秒間に声帯が何回振動するか（単位：Hz）。',
+      '男性は100-150Hz、女性は200-300Hzが普通。',
+      '<div class="example">F0が変わっても、母音が「あ」のままなら同じ「あ」として聞こえる。歌のメロディはF0の動き。</div>',
+    ],
+  },
+  formant: {
+    title: 'フォルマント（F1・F2）',
+    body: [
+      '口の中や舌の形によって強く響く<b>特定の周波数</b>のこと。',
+      '声帯の振動（F0）はバズ音みたいなものだけど、口の形で「あ」や「い」に変化する。その変化を作っているのがフォルマント。',
+      '低い方からF1・F2・F3…と番号をつける。母音は<b>F1とF2</b>の位置でほぼ決まる。',
+      '<div class="example">「あ」F1≈700, F2≈1200 ／「い」F1≈300, F2≈2400 ／「う」F1≈400, F2≈800</div>',
+      '<b>このツールでの判定方法</b>：スペクトルを少し滑らかにしたあと、F1＝200〜1100Hzの中で最も大きい山、F2＝F1+200〜2800Hzの中で最も大きい山を選んでいます。',
+      '<b>注意</b>：本格的なフォルマント検出には「LPC（線形予測符号化）」という手法が標準で、声道を共振モデルで近似してフォルマント位置を直接求めます。このツールは学習用に簡易な「ピーク拾い」を使っているため、近接した山や弱いピークでは誤検出しやすいです。',
+    ],
+  },
+  centroid: {
+    title: 'スペクトル重心（明るさ）',
+    body: [
+      'スペクトルの「重さの中心」がどの周波数にあるか。',
+      '高い音の成分が多いと右（高周波）に寄る → <b>明るい音</b>に聞こえる。',
+      '低い音の成分が多いと左（低周波）に寄る → <b>こもった音</b>に聞こえる。',
+      '<div class="example">「さ」「し」は明るい（重心が高い）。「う」「お」はこもる（重心が低い）。</div>',
+    ],
+  },
+  zcr: {
+    title: 'ZCR（ゼロ交差率）',
+    body: [
+      '波形が「ゼロのライン」を1秒間に何回横切るかの割合。',
+      '<b>多い</b>＝高い音や、ザラついたノイズっぽい音／<b>少ない</b>＝低い音や、滑らかな音。',
+      '<div class="example">母音は少なめ／「さしすせそ」「th」みたいな摩擦音は多め。子音判別の手がかり。</div>',
+    ],
+  },
+  voiced: {
+    title: '有声音 / 無声音',
+    body: [
+      '<b>有声音</b>＝声帯が振動して出している音（母音、「ま」「な」「だ」など）',
+      '<b>無声音</b>＝声帯が震えず、息や口の摩擦だけで出る音（「さ」「は」「か」など）',
+      '判定はRMS（音量がある）とZCR（周期的か）の組み合わせで自動推定しています。',
+    ],
+  },
+  vowel: {
+    title: '母音の推定',
+    body: [
+      'F1とF2の位置から「これは あ・い・う・え・お のどれっぽいか」を推定。',
+      '実際の音声認識はもっと複雑で、ここでは典型値との距離だけで簡易判定しています。',
+      'うまく出ない時は、伸ばし気味に「あー」と発声するとF1・F2が安定して当たりやすくなります。',
+    ],
+  },
+};
+
+document.querySelectorAll('[data-help]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const key = btn.dataset.help;
+    const h = HELP[key];
+    if (!h) return;
+    document.getElementById('helpContent').innerHTML =
+      '<h3>' + h.title + '</h3>' + h.body.map(p => '<p>' + p + '</p>').join('');
+    document.getElementById('helpModal').classList.add('show');
+  });
+});
+document.getElementById('helpClose').addEventListener('click', () => {
+  document.getElementById('helpModal').classList.remove('show');
+});
+document.getElementById('helpModal').addEventListener('click', e => {
+  if (e.target.id === 'helpModal') e.currentTarget.classList.remove('show');
+});
+
+// ============================================================
+// State & audio
+// ============================================================
+const state = {
+  buffer: null,
+  sampleRate: 44100,
+  fftSize: 1024,
+  freqScale: 'log',
+  magScale: 'db',
+  fmax: 8000,
+  cursorTime: 0,        // seconds
+  spectrogram: null,    // { frames: [], hopSize, freqRes }
+  previewFeature: 'centroid',
+  previewSmooth: 9,
+};
+
+let audioCtx = null;
+let activeRecorder = null;
+let activeChunks = [];
+let persistentStream = null;
+
+async function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
+}
+
+async function ensureStream() {
+  if (persistentStream && persistentStream.active) return persistentStream;
+  try {
+    persistentStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+    return persistentStream;
+  } catch (err) {
+    alert('マイクが取得できません: ' + err.message);
+    return null;
+  }
+}
+
+async function startRec() {
+  if (activeRecorder) return;
+  await ensureAudio();
+  const stream = await ensureStream();
+  if (!stream) return;
+  activeChunks = [];
+  activeRecorder = new MediaRecorder(stream);
+  activeRecorder.ondataavailable = e => activeChunks.push(e.data);
+  activeRecorder.onstop = async () => {
+    try {
+      if (!activeChunks.length) return;
+      const blob = new Blob(activeChunks, { type: activeChunks[0].type || 'audio/webm' });
+      const ab = await blob.arrayBuffer();
+      if (!ab.byteLength) return;
+      const audioBuf = await audioCtx.decodeAudioData(ab);
+      setBuffer(audioBuf);
+    } catch (err) { console.error(err); }
+    finally { activeRecorder = null; }
+  };
+  activeRecorder.start(50);
+  document.getElementById('recBtn').classList.add('recording');
+  document.getElementById('recBtn').textContent = '録音中…';
+}
+
+function stopRec() {
+  if (!activeRecorder) return;
+  try { activeRecorder.requestData(); } catch {}
+  try { activeRecorder.stop(); } catch {}
+  document.getElementById('recBtn').classList.remove('recording');
+  document.getElementById('recBtn').textContent = '押している間 録音';
+}
+
+const recBtn = document.getElementById('recBtn');
+recBtn.addEventListener('mousedown', e => { e.preventDefault(); startRec(); });
+recBtn.addEventListener('mouseup', e => { e.preventDefault(); stopRec(); });
+recBtn.addEventListener('mouseleave', () => { if (activeRecorder) stopRec(); });
+recBtn.addEventListener('touchstart', e => { e.preventDefault(); startRec(); }, { passive: false });
+recBtn.addEventListener('touchend', e => { e.preventDefault(); stopRec(); });
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'INPUT') {
+    e.preventDefault();
+    if (!activeRecorder) startRec();
+  }
+});
+document.addEventListener('keyup', e => {
+  if (e.code === 'Space') { e.preventDefault(); stopRec(); }
+});
+
+// Synthetic vowel generator (for testing without mic)
+document.querySelectorAll('.sample-btns button').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    await ensureAudio();
+    const sr = audioCtx.sampleRate;
+    const dur = 1.0;
+    const buf = audioCtx.createBuffer(1, Math.floor(sr * dur), sr);
+    const data = buf.getChannelData(0);
+    const f0 = 150;
+    // Vowel formants (F1, F2, F3) — Tokyo Japanese male midpoints
+    // (matches the vowel templates used for detection)
+    const formants = {
+      a: [760, 1280, 2500],
+      i: [300, 2200, 3000],
+      u: [350, 1250, 2300],
+      e: [480, 1900, 2500],
+      o: [480, 900,  2400],
+    }[btn.dataset.vowel];
+    for (let i = 0; i < data.length; i++) {
+      const t = i / sr;
+      // Harmonic series of F0 shaped by formant peaks
+      let v = 0;
+      for (let h = 1; h <= 30; h++) {
+        const f = f0 * h;
+        if (f > sr / 2) break;
+        let amp = 0;
+        for (const fmt of formants) {
+          const dist = (f - fmt) / 80;
+          amp += Math.exp(-dist * dist);
+        }
+        v += amp * Math.sin(2 * Math.PI * f * t) / (h * 0.7 + 1);
+      }
+      // Envelope (fade in/out)
+      const env = Math.min(1, t * 10) * Math.min(1, (dur - t) * 10);
+      data[i] = v * env * 0.15;
+    }
+    setBuffer(buf);
+  });
+});
+
+// ============================================================
+// FFT (Cooley-Tukey radix-2)
+// ============================================================
+function fft(re, im) {
+  const N = re.length;
+  for (let i = 1, j = 0; i < N; i++) {
+    let bit = N >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+  }
+  for (let len = 2; len <= N; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < N; i += len) {
+      let cRe = 1, cIm = 0;
+      for (let j = 0; j < (len >> 1); j++) {
+        const h = i + j + (len >> 1);
+        const vRe = re[h] * cRe - im[h] * cIm, vIm = re[h] * cIm + im[h] * cRe;
+        re[h] = re[i+j] - vRe; im[h] = im[i+j] - vIm;
+        re[i+j] += vRe; im[i+j] += vIm;
+        const nr = cRe * wRe - cIm * wIm; cIm = cRe * wIm + cIm * wRe; cRe = nr;
+      }
+    }
+  }
+}
+
+function hannWindow(samples, start, size, out) {
+  // Remove per-frame DC offset before windowing (avoids bin 0 dominating FFT)
+  let mean = 0, n = 0;
+  for (let i = 0; i < size; i++) {
+    const si = start + i;
+    if (si >= 0 && si < samples.length) { mean += samples[si]; n++; }
+  }
+  if (n > 0) mean /= n;
+  for (let i = 0; i < size; i++) {
+    const si = start + i;
+    const w = 0.5 * (1 - Math.cos(2 * Math.PI * i / (size - 1)));
+    out[i] = si >= 0 && si < samples.length ? (samples[si] - mean) * w : 0;
+  }
+}
+
+// Compute spectrum (magnitude) at a sample position
+function spectrumAt(samples, sampleRate, centerSample, fftSize) {
+  const re = new Float32Array(fftSize);
+  const im = new Float32Array(fftSize);
+  hannWindow(samples, centerSample - fftSize / 2, fftSize, re);
+  fft(re, im);
+  const mag = new Float32Array(fftSize / 2);
+  for (let k = 0; k < fftSize / 2; k++) mag[k] = Math.sqrt(re[k]*re[k] + im[k]*im[k]);
+  return mag;
+}
+
+// Compute full spectrogram (all frames)
+function computeSpectrogram(samples, sampleRate, fftSize) {
+  const hop = fftSize / 4;
+  const numFrames = Math.max(1, Math.floor((samples.length - fftSize) / hop) + 1);
+  const frames = [];
+  let peak = 0;
+  for (let f = 0; f < numFrames; f++) {
+    const mag = spectrumAt(samples, sampleRate, f * hop + fftSize / 2, fftSize);
+    for (let k = 0; k < mag.length; k++) if (mag[k] > peak) peak = mag[k];
+    frames.push(mag);
+  }
+  return { frames, hopSize: hop, freqRes: sampleRate / fftSize, peak, fftSize };
+}
+
+// ============================================================
+// Voice feature extraction
+// ============================================================
+function computeRMS(samples, start, size) {
+  let sum = 0; let n = 0;
+  const end = Math.min(samples.length, start + size);
+  for (let i = Math.max(0, start); i < end; i++) { sum += samples[i] * samples[i]; n++; }
+  return n > 0 ? Math.sqrt(sum / n) : 0;
+}
+
+function computeZCR(samples, start, size) {
+  let zc = 0; let n = 0;
+  const end = Math.min(samples.length, start + size);
+  let prev = samples[Math.max(0, start)];
+  for (let i = Math.max(0, start) + 1; i < end; i++) {
+    if ((samples[i] >= 0) !== (prev >= 0)) zc++;
+    prev = samples[i]; n++;
+  }
+  return n > 0 ? zc / n : 0;
+}
+
+// Autocorrelation-based F0 (Hz) or null if unvoiced.
+// Uses DC removal + per-lag bias compensation (unbiased ACF) so that low F0s
+// are not systematically underestimated.
+function estimateF0(samples, sampleRate, start, size) {
+  const minLag = Math.floor(sampleRate / 500);
+  const maxLag = Math.floor(sampleRate / 70);
+  const targetWin = Math.max(size, maxLag * 2 + 64);
+  const center = start + Math.floor(size / 2);
+  const s = Math.max(0, center - Math.floor(targetWin / 2));
+  const N = Math.min(samples.length - s, targetWin);
+  if (N < maxLag * 2) return null;
+  // Remove DC offset
+  let mean = 0;
+  for (let i = 0; i < N; i++) mean += samples[s + i];
+  mean /= N;
+  const buf = new Float32Array(N);
+  for (let i = 0; i < N; i++) buf[i] = samples[s + i] - mean;
+  // r(0)
+  let r0 = 0;
+  for (let i = 0; i < N; i++) r0 += buf[i] * buf[i];
+  if (r0 < 1e-6) return null;
+  // Biased ACF (inherent triangular bias favors shorter lags → fewer octave errors).
+  // DC removal above + biased ACF is the practical default used by many simple
+  // pitch detectors. For more accuracy, YIN/CMNDF would be the next step.
+  let bestLag = -1, bestCorr = 0.3;
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    if (lag >= N) break;
+    let r = 0;
+    const M = N - lag;
+    for (let i = 0; i < M; i++) r += buf[i] * buf[i + lag];
+    const c = r / r0;
+    if (c > bestCorr) { bestCorr = c; bestLag = lag; }
+  }
+  return bestLag > 0 ? sampleRate / bestLag : null;
+}
+
+// Spectral centroid (Hz)
+function spectralCentroid(mag, freqRes) {
+  let num = 0, den = 0;
+  for (let k = 1; k < mag.length; k++) {
+    num += k * freqRes * mag[k];
+    den += mag[k];
+  }
+  return den > 1e-9 ? num / den : 0;
+}
+
+// Estimate F1, F2 by peak picking on smoothed spectrum.
+// F1: strongest peak in 200-1100Hz
+// F2: strongest peak in 800-3500Hz, must be >= F1 + 200Hz
+function estimateFormants(mag, freqRes) {
+  const win = 2;
+  const smooth = new Float32Array(mag.length);
+  for (let i = 0; i < mag.length; i++) {
+    let s = 0, c = 0;
+    for (let j = -win; j <= win; j++) {
+      const k = i + j;
+      if (k >= 0 && k < mag.length) { s += mag[k]; c++; }
+    }
+    smooth[i] = s / c;
+  }
+  const peaks = [];
+  for (let i = 2; i < smooth.length - 2; i++) {
+    if (smooth[i] > smooth[i - 1] && smooth[i] > smooth[i + 1] &&
+        smooth[i] > smooth[i - 2] && smooth[i] > smooth[i + 2]) {
+      peaks.push({ freq: i * freqRes, val: smooth[i] });
+    }
+  }
+  // F1: strongest peak in 200-1100Hz
+  let f1 = null;
+  let f1Val = 0;
+  for (const p of peaks) {
+    if (p.freq >= 200 && p.freq <= 1100 && p.val > f1Val) { f1Val = p.val; f1 = p.freq; }
+  }
+  // F2: strongest peak above F1+200Hz, capped at 2800Hz
+  const f2Min = f1 != null ? f1 + 200 : 600;
+  let f2 = null;
+  let f2Val = 0;
+  for (const p of peaks) {
+    if (p.freq >= f2Min && p.freq <= 2800 && p.val > f2Val) { f2Val = p.val; f2 = p.freq; }
+  }
+  return { f1, f2 };
+}
+
+// Vowel guess from F1, F2 (log-distance to typical Tokyo-Japanese male values)
+// References: Yazawa & Kondo dataset, PMC9928875 (Japanese vowel formants)
+// Note: Tokyo /u/ is centralized → F2 ≈ 1250 (not 800 as in many English /u/ references)
+const VOWEL_TEMPLATES = {
+  'あ': [760, 1280],
+  'い': [300, 2200],
+  'う': [350, 1250],
+  'え': [480, 1900],
+  'お': [480, 900],
+};
+function guessVowel(f1, f2) {
+  if (f1 == null || f2 == null) return null;
+  let best = null, bestD = Infinity;
+  for (const [v, [tf1, tf2]] of Object.entries(VOWEL_TEMPLATES)) {
+    // log distance is more perceptually accurate
+    const d = (Math.log(f1 / tf1)) ** 2 + (Math.log(f2 / tf2)) ** 2;
+    if (d < bestD) { bestD = d; best = v; }
+  }
+  return best;
+}
+
+// Compute a feature value at given sample position (for previews)
+function featureAt(samples, sampleRate, centerSample, fftSize, feature) {
+  const start = Math.floor(centerSample - fftSize / 2);
+  switch (feature) {
+    case 'rms': return computeRMS(samples, start, fftSize);
+    case 'zcr': return computeZCR(samples, start, fftSize);
+    case 'f0': { const f = estimateF0(samples, sampleRate, start, fftSize); return f || 0; }
+    case 'centroid': {
+      const mag = spectrumAt(samples, sampleRate, centerSample, fftSize);
+      return spectralCentroid(mag, sampleRate / fftSize);
+    }
+    case 'lowEnergy':
+    case 'midEnergy':
+    case 'highEnergy': {
+      const mag = spectrumAt(samples, sampleRate, centerSample, fftSize);
+      const freqRes = sampleRate / fftSize;
+      const ranges = { lowEnergy: [100, 800], midEnergy: [800, 3000], highEnergy: [3000, sampleRate / 2] };
+      const [lo, hi] = ranges[feature];
+      const loK = Math.floor(lo / freqRes), hiK = Math.min(mag.length - 1, Math.ceil(hi / freqRes));
+      let e = 0;
+      for (let k = loK; k <= hiK; k++) e += mag[k] * mag[k];
+      return Math.sqrt(e);
+    }
+  }
+  return 0;
+}
+
+// ============================================================
+// Rendering
+// ============================================================
+function setupCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, W: rect.width, H: rect.height };
+}
+
+// Map frequency to y-pixel given scale + fmax
+function freqToY(f, H, fmax, scale) {
+  if (scale === 'log') {
+    const logMin = Math.log(60), logMax = Math.log(fmax);
+    if (f < 60) return H;
+    return H - ((Math.log(f) - logMin) / (logMax - logMin)) * H;
+  }
+  return H - (f / fmax) * H;
+}
+
+// Magnitude to brightness (0-1)
+function magToBright(mag, peak, scale) {
+  if (peak <= 0) return 0;
+  if (scale === 'db') {
+    // -60dB → 0, 0dB → 1
+    const db = 20 * Math.log10(Math.max(1e-6, mag / peak));
+    return Math.max(0, Math.min(1, (db + 60) / 60));
+  }
+  return Math.max(0, Math.min(1, mag / peak));
+}
+
+// Light-bg colormap: white → light blue → blue → purple → deep red
+function colorMap(t) {
+  t = Math.max(0, Math.min(1, t));
+  // anchor stops
+  const stops = [
+    [1.00, 1.00, 1.00], // white
+    [0.85, 0.93, 1.00], // very light blue
+    [0.40, 0.66, 0.95], // sky blue
+    [0.23, 0.40, 0.85], // blue
+    [0.45, 0.20, 0.65], // purple
+    [0.78, 0.13, 0.20], // deep red
+  ];
+  const seg = t * (stops.length - 1);
+  const i = Math.min(stops.length - 2, Math.floor(seg));
+  const f = seg - i;
+  const a = stops[i], b = stops[i + 1];
+  return [
+    Math.round(255 * (a[0] * (1 - f) + b[0] * f)),
+    Math.round(255 * (a[1] * (1 - f) + b[1] * f)),
+    Math.round(255 * (a[2] * (1 - f) + b[2] * f)),
+  ];
+}
+
+function drawWaveform() {
+  const canvas = document.getElementById('wfCanvas');
+  const { ctx, W, H } = setupCanvas(canvas);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  // Center line
+  ctx.strokeStyle = '#e5e5e5';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, H/2); ctx.lineTo(W, H/2); ctx.stroke();
+
+  if (!state.buffer) {
+    ctx.fillStyle = '#bbb';
+    ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('録音すると波形が表示されます', W / 2, H / 2);
+    return;
+  }
+  const samples = state.buffer.getChannelData(0);
+  const spp = samples.length / W;
+  ctx.strokeStyle = '#2563eb';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 0; x < W; x++) {
+    const s = Math.floor(x * spp), e = Math.floor((x + 1) * spp);
+    let min = 1, max = -1;
+    for (let i = s; i < e && i < samples.length; i++) {
+      if (samples[i] < min) min = samples[i];
+      if (samples[i] > max) max = samples[i];
+    }
+    const yMin = H / 2 - max * (H / 2) * 0.92;
+    const yMax = H / 2 - min * (H / 2) * 0.92;
+    ctx.moveTo(x, yMin); ctx.lineTo(x, yMax);
+  }
+  ctx.stroke();
+  // Cursor line
+  const cx = (state.cursorTime / state.buffer.duration) * W;
+  ctx.strokeStyle = '#f59e0b';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke();
+}
+
+function drawSpectrum() {
+  const canvas = document.getElementById('spCanvas');
+  const { ctx, W, H } = setupCanvas(canvas);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  if (!state.buffer) return;
+  const sr = state.buffer.sampleRate;
+  const centerSample = Math.floor(state.cursorTime * sr);
+  const mag = spectrumAt(state.buffer.getChannelData(0), sr, centerSample, state.fftSize);
+  const freqRes = sr / state.fftSize;
+  let peak = 0;
+  for (let i = 0; i < mag.length; i++) if (mag[i] > peak) peak = mag[i];
+
+  const padLeft = 56;
+  const padTop = 28;
+  const padBottom = 26;
+  const plotW = W - padLeft;
+  const plotH = H - padTop - padBottom;
+  const spectrumX = (f) => padLeft + (freqToX(f, plotW) || 0);
+  const plotTop = padTop;
+  const plotBottom = padTop + plotH;
+
+  // Y-axis labels (dB or linear)
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  const yLabels = state.magScale === 'db'
+    ? [{v: 0, txt: '0dB'}, {v: 0.5, txt: '-30dB'}, {v: 0.83, txt: '-50dB'}, {v: 1, txt: '-60dB'}]
+    : [{v: 0, txt: '1.0'}, {v: 0.25, txt: '0.75'}, {v: 0.5, txt: '0.5'}, {v: 0.75, txt: '0.25'}, {v: 1, txt: '0'}];
+  ctx.strokeStyle = '#f5f5f5';
+  ctx.lineWidth = 1;
+  for (const lbl of yLabels) {
+    const y = plotTop + lbl.v * plotH;
+    ctx.beginPath(); ctx.moveTo(padLeft, y); ctx.lineTo(W, y); ctx.stroke();
+    ctx.fillStyle = '#666';
+    ctx.fillText(lbl.txt, padLeft - 8, y);
+  }
+  // Y-axis title
+  ctx.save();
+  ctx.translate(14, plotTop + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillStyle = '#888';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(state.magScale === 'db' ? '強さ (dB)' : '強さ (正規化)', 0, 0);
+  ctx.restore();
+
+  // X-axis grid
+  ctx.strokeStyle = '#f0f0f0';
+  ctx.lineWidth = 1;
+  const gridFreqs = state.freqScale === 'log' ? [100, 500, 1000, 2000, 4000, 8000] : [1000, 2000, 4000, 6000, 8000];
+  for (const f of gridFreqs) {
+    if (f > state.fmax) continue;
+    const x = spectrumX(f);
+    ctx.beginPath(); ctx.moveTo(x, plotTop); ctx.lineTo(x, plotBottom); ctx.stroke();
+  }
+  // X-axis baseline
+  ctx.strokeStyle = '#ccc';
+  ctx.beginPath(); ctx.moveTo(padLeft, plotBottom); ctx.lineTo(W, plotBottom); ctx.stroke();
+
+  // Spectrum curve (filled area + line)
+  const grad = ctx.createLinearGradient(0, plotTop, 0, plotBottom);
+  grad.addColorStop(0, 'rgba(37, 99, 235, 0.35)');
+  grad.addColorStop(1, 'rgba(37, 99, 235, 0.02)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  let started = false;
+  ctx.moveTo(padLeft, plotBottom);
+  for (let k = 1; k < mag.length; k++) {
+    const f = k * freqRes;
+    if (f > state.fmax) break;
+    const x = spectrumX(f);
+    const v = magToBright(mag[k], peak, state.magScale);
+    const y = plotBottom - v * plotH;
+    if (!started) { ctx.lineTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  ctx.lineTo(W, plotBottom);
+  ctx.closePath();
+  ctx.fill();
+  // Line
+  ctx.strokeStyle = '#2563eb';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  started = false;
+  for (let k = 1; k < mag.length; k++) {
+    const f = k * freqRes;
+    if (f > state.fmax) break;
+    const x = spectrumX(f);
+    const v = magToBright(mag[k], peak, state.magScale);
+    const y = plotBottom - v * plotH;
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Mark F1, F2 (labels in top padding area)
+  const formants = estimateFormants(mag, freqRes);
+  const fmtList = [['F1', formants.f1, '#dc2626'], ['F2', formants.f2, '#f59e0b']];
+  const positions = fmtList.map(([n, f]) => f && f <= state.fmax ? spectrumX(f) : null);
+  for (let i = 0; i < fmtList.length; i++) {
+    const [name, f, col] = fmtList[i];
+    const x = positions[i];
+    if (x === null) continue;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.moveTo(x, plotTop); ctx.lineTo(x, plotBottom); ctx.stroke();
+    ctx.setLineDash([]);
+    let labelY = 10;
+    if (i === 1 && positions[0] !== null && Math.abs(positions[0] - positions[1]) < 80) labelY = 22;
+    ctx.fillStyle = col;
+    ctx.font = '600 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(name + ' ' + Math.round(f) + 'Hz', x, labelY);
+  }
+
+  // X-axis labels
+  ctx.fillStyle = '#444';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  for (const f of gridFreqs) {
+    if (f > state.fmax) continue;
+    const x = spectrumX(f);
+    ctx.fillText(f >= 1000 ? (f/1000) + 'k' : f + 'Hz', x, H - 8);
+  }
+}
+
+function freqToX(f, W) {
+  // Returns x within [0, W] (caller adds left padding if any)
+  if (state.freqScale === 'log') {
+    const logMin = Math.log(60), logMax = Math.log(state.fmax);
+    if (f < 60) return 0;
+    return ((Math.log(f) - logMin) / (logMax - logMin)) * W;
+  }
+  return (f / state.fmax) * W;
+}
+
+function drawSpectrogram() {
+  const canvas = document.getElementById('sgCanvas');
+  const { ctx, W, H } = setupCanvas(canvas);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  const padL = 50, padT = 14, padB = 24;
+  const plotW = W - padL, plotH = H - padT - padB;
+  if (!state.buffer || !state.spectrogram) {
+    ctx.fillStyle = '#bbb';
+    ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('録音すると表示されます', W / 2, H / 2);
+    return;
+  }
+  const sg = state.spectrogram;
+  const freqRes = sg.freqRes;
+  const numFrames = sg.frames.length;
+  // Render heatmap to an off-screen canvas at CSS-pixel size, then drawImage
+  // (putImageData ignores the DPR transform — using drawImage avoids that)
+  const off = document.createElement('canvas');
+  off.width = Math.max(1, Math.floor(plotW));
+  off.height = Math.max(1, Math.floor(plotH));
+  const offCtx = off.getContext('2d');
+  const img = offCtx.createImageData(off.width, off.height);
+  for (let x = 0; x < off.width; x++) {
+    const fIdx = Math.min(numFrames - 1, Math.floor((x / off.width) * numFrames));
+    const mag = sg.frames[fIdx];
+    for (let y = 0; y < off.height; y++) {
+      let f;
+      if (state.freqScale === 'log') {
+        const logMin = Math.log(60), logMax = Math.log(state.fmax);
+        f = Math.exp(logMin + (1 - y / off.height) * (logMax - logMin));
+      } else {
+        f = (1 - y / off.height) * state.fmax;
+      }
+      const k = Math.round(f / freqRes);
+      const idx = (y * off.width + x) * 4;
+      if (k < 1 || k >= mag.length) {
+        img.data[idx] = 255; img.data[idx+1] = 255; img.data[idx+2] = 255; img.data[idx+3] = 255;
+        continue;
+      }
+      const b = magToBright(mag[k], sg.peak, state.magScale);
+      const [r, g, bl] = colorMap(b);
+      img.data[idx] = r; img.data[idx + 1] = g; img.data[idx + 2] = bl; img.data[idx + 3] = 255;
+    }
+  }
+  offCtx.putImageData(img, 0, 0);
+  ctx.drawImage(off, padL, padT, plotW, plotH);
+
+  // Cursor line
+  const cx = padL + (state.cursorTime / state.buffer.duration) * plotW;
+  ctx.strokeStyle = '#f59e0b';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx, padT); ctx.lineTo(cx, padT + plotH); ctx.stroke();
+
+  // Frequency axis (left)
+  ctx.fillStyle = '#444';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  const labelFreqs = state.freqScale === 'log' ? [100, 500, 1000, 2000, 4000, 8000] : [1000, 3000, 5000, 7000];
+  for (const f of labelFreqs) {
+    if (f > state.fmax) continue;
+    const y = padT + freqToY(f, plotH, state.fmax, state.freqScale);
+    ctx.fillText(f >= 1000 ? (f/1000) + 'k' : f + '', padL - 8, y);
+    ctx.strokeStyle = '#eee';
+    ctx.beginPath(); ctx.moveTo(padL - 3, y); ctx.lineTo(padL, y); ctx.stroke();
+  }
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#888';
+  ctx.font = '10px sans-serif';
+  ctx.save();
+  ctx.translate(14, padT + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('周波数 (Hz)', 0, 0);
+  ctx.restore();
+
+  // Time axis (bottom)
+  ctx.fillStyle = '#444';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const dur = state.buffer.duration;
+  const ticks = 5;
+  for (let i = 0; i <= ticks; i++) {
+    const t = (i / ticks) * dur;
+    const x = padL + (t / dur) * plotW;
+    if (i === 0) ctx.textAlign = 'left';
+    else if (i === ticks) ctx.textAlign = 'right';
+    else ctx.textAlign = 'center';
+    ctx.fillText((t * 1000).toFixed(0) + 'ms', x, padT + plotH + 4);
+  }
+}
+
+function updateFeatures() {
+  if (!state.buffer) {
+    ['featRms','featF0','featF1','featF2','featCentroid','featZcr','featVoiced','featVowel'].forEach(id => {
+      const el = document.getElementById(id);
+      el.textContent = '-';
+      el.classList.add('muted');
+    });
+    return;
+  }
+  const samples = state.buffer.getChannelData(0);
+  const sr = state.buffer.sampleRate;
+  const center = Math.floor(state.cursorTime * sr);
+  const start = center - state.fftSize / 2;
+  const rms = computeRMS(samples, start, state.fftSize);
+  const zcr = computeZCR(samples, start, state.fftSize);
+  const f0 = estimateF0(samples, sr, start, state.fftSize);
+  const mag = spectrumAt(samples, sr, center, state.fftSize);
+  const centroid = spectralCentroid(mag, sr / state.fftSize);
+  const { f1, f2 } = estimateFormants(mag, sr / state.fftSize);
+  const voiced = f0 !== null && rms > 0.01;
+  const vowel = voiced ? guessVowel(f1, f2) : null;
+
+  const set = (id, val, muted = false) => {
+    const el = document.getElementById(id);
+    el.textContent = val;
+    el.classList.toggle('muted', muted);
+  };
+  set('featRms', rms.toFixed(3));
+  set('featF0', f0 ? Math.round(f0) + ' Hz' : '無声/不明', !f0);
+  set('featF1', f1 ? Math.round(f1) + ' Hz' : '-', !f1);
+  set('featF2', f2 ? Math.round(f2) + ' Hz' : '-', !f2);
+  set('featCentroid', Math.round(centroid) + ' Hz');
+  set('featZcr', zcr.toFixed(3));
+  set('featVoiced', voiced ? '有声' : '無声/無音');
+  set('featVowel', vowel || '-', !vowel);
+}
+
+function drawPreview() {
+  const canvas = document.getElementById('previewCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  const cx = W / 2, cy = H / 2;
+  const baseR = Math.min(W, H) * 0.32;
+  const variation = Math.min(W, H) * 0.12;
+
+  // Base circle reference
+  ctx.strokeStyle = '#e5e5e5';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, baseR, 0, Math.PI * 2); ctx.stroke();
+
+  if (!state.buffer) {
+    ctx.fillStyle = '#bbb';
+    ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('録音すると形が現れます', cx, cy);
+    return;
+  }
+
+  const samples = state.buffer.getChannelData(0);
+  const sr = state.buffer.sampleRate;
+  const numPoints = 360;
+  const values = new Float32Array(numPoints);
+  for (let i = 0; i < numPoints; i++) {
+    const center = Math.floor((i + 0.5) * samples.length / numPoints);
+    values[i] = featureAt(samples, sr, center, state.fftSize, state.previewFeature);
+  }
+  // Smoothing
+  const win = state.previewSmooth;
+  const half = Math.floor(win / 2);
+  const sm = new Float32Array(numPoints);
+  for (let i = 0; i < numPoints; i++) {
+    let s = 0, c = 0;
+    for (let j = -half; j <= half; j++) {
+      const k = i + j;
+      if (k >= 0 && k < numPoints) { s += values[k]; c++; }
+    }
+    sm[i] = s / c;
+  }
+  // Normalize
+  let peak = 0; for (let i = 0; i < numPoints; i++) if (sm[i] > peak) peak = sm[i];
+  if (peak <= 0) peak = 1;
+  for (let i = 0; i < numPoints; i++) sm[i] /= peak;
+
+  // Draw shape
+  ctx.strokeStyle = '#2563eb';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let i = 0; i <= numPoints; i++) {
+    const idx = i % numPoints;
+    const angle = -Math.PI / 2 + (idx / numPoints) * Math.PI * 2;
+    const r = baseR + sm[idx] * variation;
+    const x = cx + Math.cos(angle) * r;
+    const y = cy + Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+
+  // Label which feature
+  ctx.fillStyle = '#999';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'center';
+  const label = {
+    rms: '音量', f0: '声の高さ', centroid: '明るさ（重心）',
+    lowEnergy: '低域エネルギー', midEnergy: '中域エネルギー', highEnergy: '高域エネルギー', zcr: 'ZCR'
+  }[state.previewFeature];
+  ctx.fillText('→ ' + label, cx, H - 8);
+}
+
+// ============================================================
+// Orchestration
+// ============================================================
+function setBuffer(buf) {
+  state.buffer = buf;
+  state.sampleRate = buf.sampleRate;
+  state.cursorTime = buf.duration / 2;
+  state.spectrogram = computeSpectrogram(buf.getChannelData(0), buf.sampleRate, state.fftSize);
+  updateCursorLabel();
+  redrawAll();
+}
+
+function updateCursorLabel() {
+  const el = document.getElementById('cursorTimeLabel');
+  if (!state.buffer) { el.textContent = ''; return; }
+  el.textContent = `カーソル: ${(state.cursorTime * 1000).toFixed(0)}ms / ${(state.buffer.duration * 1000).toFixed(0)}ms`;
+}
+
+function redrawAll() {
+  drawWaveform();
+  drawSpectrum();
+  drawSpectrogram();
+  drawPreview();
+  updateFeatures();
+}
+
+// Cursor interaction
+function attachCursorClick(canvasId, leftPadFrac = 0) {
+  const canvas = document.getElementById(canvasId);
+  canvas.addEventListener('click', e => {
+    if (!state.buffer) return;
+    const rect = canvas.getBoundingClientRect();
+    const padPx = leftPadFrac;
+    const plotW = rect.width - padPx;
+    const x = e.clientX - rect.left - padPx;
+    if (x < 0 || x > plotW) return;
+    state.cursorTime = Math.max(0, Math.min(state.buffer.duration, (x / plotW) * state.buffer.duration));
+    updateCursorLabel();
+    drawWaveform();
+    drawSpectrum();
+    drawSpectrogram();
+    updateFeatures();
+  });
+}
+attachCursorClick('wfCanvas');
+attachCursorClick('sgCanvas', 50);
+
+// Parameter wiring
+document.getElementById('fftSizeSel').addEventListener('change', e => {
+  state.fftSize = parseInt(e.target.value, 10);
+  document.getElementById('fftSizeVal').textContent = state.fftSize;
+  if (state.buffer) {
+    state.spectrogram = computeSpectrogram(state.buffer.getChannelData(0), state.buffer.sampleRate, state.fftSize);
+  }
+  redrawAll();
+});
+document.getElementById('freqScaleSel').addEventListener('change', e => {
+  state.freqScale = e.target.value;
+  redrawAll();
+});
+document.getElementById('magScaleSel').addEventListener('change', e => {
+  state.magScale = e.target.value;
+  redrawAll();
+});
+document.getElementById('fmaxSlider').addEventListener('input', e => {
+  state.fmax = parseInt(e.target.value, 10);
+  document.getElementById('fmaxVal').textContent = state.fmax + 'Hz';
+  redrawAll();
+});
+document.getElementById('previewFeatureSel').addEventListener('change', e => {
+  state.previewFeature = e.target.value;
+  drawPreview();
+});
+document.getElementById('smoothSlider').addEventListener('input', e => {
+  state.previewSmooth = parseInt(e.target.value, 10);
+  document.getElementById('smoothVal').textContent = state.previewSmooth;
+  drawPreview();
+});
+
+window.addEventListener('resize', redrawAll);
+
+// Initial render
+redrawAll();
+</script>
+</body>
+</html>

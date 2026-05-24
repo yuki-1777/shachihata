@@ -360,6 +360,31 @@
   .modal-legend .raw { color: #4a9eff; }
   .modal-legend .vowel { color: #5cff8a; }
   .modal-legend .info { color: #ffd24a; }
+  /* Tabs */
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid #e5e5e5;
+    margin-bottom: 14px;
+    margin-left: -20px;
+    margin-right: -20px;
+    padding: 0 12px;
+  }
+  .tab-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 8px 4px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    color: #999;
+    font-family: inherit;
+    letter-spacing: 0.04em;
+  }
+  .tab-btn.active { color: #222; border-bottom-color: #222; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
 </style>
 </head>
 <body>
@@ -395,93 +420,116 @@
   </main>
 
   <aside class="right">
-    <h2>表示</h2>
-    <div class="toggle" id="viewToggle">
-      <button data-val="circle" class="active">円</button>
-      <button data-val="linear">直線</button>
-    </div>
-    <div class="checks" style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:#444;margin-top:8px;">
-      <label><input type="checkbox" id="showRaw"> 生波形</label>
-      <label><input type="checkbox" id="showQuant" checked> 量子化後</label>
-      <label><input type="checkbox" id="showLines"> 基準線</label>
-      <label><input type="checkbox" id="showZero"> 0ライン（円の場合は基準円）</label>
-      <label><input type="checkbox" id="showSectors" checked> セクタ境界</label>
-      <label><input type="checkbox" id="showBoundaryOnCircle" checked> 子音/母音の境界</label>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="shape">形状</button>
+      <button class="tab-btn" data-tab="quant">量子化</button>
+      <button class="tab-btn" data-tab="display">表示</button>
     </div>
 
-    <h2>量子化モード</h2>
-    <div class="toggle" id="snapModeToggle">
-      <button data-val="off">OFF</button>
-      <button data-val="A" class="active">A：山ごと</button>
-      <button data-val="B">B：方向転換</button>
-    </div>
-    <div class="hint">A=0クロスで区切った山の最大値だけスナップ。B=極値ごとにスナップ。</div>
+    <!-- 形状タブ -->
+    <div class="tab-panel active" id="tab-shape">
+      <h2>波形ソース</h2>
+      <div class="toggle" id="pitchModeToggle">
+        <button data-val="full" class="active">全体</button>
+        <button data-val="one-period">1周期</button>
+        <button data-val="spectral">3帯域</button>
+      </div>
+      <div class="hint" id="pitchModeHint"></div>
 
-    <h2>接続方法</h2>
-    <div class="toggle" id="connectToggle">
-      <button data-val="step">階段</button>
-      <button data-val="linear">線形</button>
-      <button data-val="smooth" class="active">滑らか</button>
-    </div>
+      <div class="control" id="spectralSmoothCtrl" style="margin-top:10px; display:none;">
+        <label><span>3帯域 スムージング</span><span class="val" id="spectralSmoothVal">15</span></label>
+        <input type="range" id="spectralSmooth" min="1" max="51" step="2" value="15">
+        <div class="hint">大きいほど細かい揺らぎが消えてなだらかに</div>
+      </div>
 
-    <h2>基準線</h2>
-    <div class="toggle" id="spacingToggle">
-      <button data-val="equal" class="active">等間隔</button>
-      <button data-val="log">対数</button>
-    </div>
-    <div class="control" style="margin-top:8px;">
-      <label><span>本数（片側）</span><span class="val" id="lineCountVal">5</span></label>
-      <input type="range" id="lineCount" min="1" max="20" value="5">
-    </div>
-    <div class="control">
-      <label><span>log圧縮強度 k</span><span class="val" id="logKVal">5</span></label>
-      <input type="range" id="logK" min="0.1" max="50" step="0.1" value="5">
-      <div class="hint">対数モード時のみ有効。大きいほど大きな値が高い線へ強く集約される</div>
-      <div id="lineInfo" style="margin-top:6px; font-size:10px; color:#666; line-height:1.5; font-family:monospace;"></div>
-    </div>
+      <div class="control" style="margin-top:16px;">
+        <label><span>最大振幅（mm）</span><span class="val" id="variationVal">2.00 mm</span></label>
+        <input type="range" id="variation" min="0.1" max="5" step="0.05" value="2.0">
+        <div class="hint">印面 10.5mm に対する波形の外径振幅（±方向）</div>
+      </div>
 
-    <h2>正規化</h2>
-    <div class="toggle" id="normToggle">
-      <button data-val="per-sector" class="active">文字ごと</button>
-      <button data-val="global">全体</button>
-    </div>
-    <div class="hint">文字ごと：文字間の音量差をキャンセル。全体：v1 互換。</div>
+      <h2>オフセット方向</h2>
+      <div class="toggle" id="directionToggle">
+        <button data-val="both" class="active">両側</button>
+        <button data-val="outward">外向きのみ</button>
+      </div>
 
-    <h2>解像度</h2>
-    <div class="toggle" id="resolutionToggle">
-      <button data-val="256">256</button>
-      <button data-val="512" class="active">512</button>
-      <button data-val="1024">1024</button>
+      <h2>境界処理</h2>
+      <div class="toggle" id="boundaryToggle">
+        <button data-val="fade">フェード</button>
+        <button data-val="sharp" class="active">シャープ</button>
+      </div>
+      <div class="control" style="margin-top:10px;">
+        <label><span>フェード幅</span><span class="val" id="fadeVal">8%</span></label>
+        <input type="range" id="fade" min="0" max="30" value="8">
+      </div>
     </div>
 
-    <h2>オフセット方向</h2>
-    <div class="toggle" id="directionToggle">
-      <button data-val="both" class="active">両側</button>
-      <button data-val="outward">外向きのみ</button>
+    <!-- 量子化タブ -->
+    <div class="tab-panel" id="tab-quant">
+      <h2>量子化モード</h2>
+      <div class="toggle" id="snapModeToggle">
+        <button data-val="off">OFF</button>
+        <button data-val="A">A：山ごと</button>
+        <button data-val="B" class="active">B：方向転換</button>
+      </div>
+      <div class="hint">A=0クロスで区切った山の最大値だけスナップ。B=極値ごとにスナップ。</div>
+
+      <h2>接続方法</h2>
+      <div class="toggle" id="connectToggle">
+        <button data-val="step">階段</button>
+        <button data-val="linear">線形</button>
+        <button data-val="smooth" class="active">滑らか</button>
+      </div>
+
+      <h2>正規化</h2>
+      <div class="toggle" id="normToggle">
+        <button data-val="per-sector" class="active">文字ごと</button>
+        <button data-val="global">全体</button>
+      </div>
+      <div class="hint">文字ごと：文字間の音量差をキャンセル。全体：v1 互換。</div>
+
+      <h2>解像度</h2>
+      <div class="toggle" id="resolutionToggle">
+        <button data-val="256">256</button>
+        <button data-val="512" class="active">512</button>
+        <button data-val="1024">1024</button>
+      </div>
+
+      <h2>基準線</h2>
+      <div class="toggle" id="spacingToggle">
+        <button data-val="equal" class="active">等間隔</button>
+        <button data-val="log">対数</button>
+      </div>
+      <div class="control" style="margin-top:8px;">
+        <label><span>本数（片側）</span><span class="val" id="lineCountVal">5</span></label>
+        <input type="range" id="lineCount" min="1" max="20" value="5">
+      </div>
+      <div class="control">
+        <label><span>log圧縮強度 k</span><span class="val" id="logKVal">5</span></label>
+        <input type="range" id="logK" min="0.1" max="50" step="0.1" value="5">
+        <div class="hint">対数モード時のみ有効。大きいほど大きな値が高い線へ強く集約される</div>
+        <div id="lineInfo" style="margin-top:6px; font-size:10px; color:#666; line-height:1.5; font-family:monospace;"></div>
+      </div>
     </div>
 
-    <h2>境界処理</h2>
-    <div class="toggle" id="boundaryToggle">
-      <button data-val="fade">フェード</button>
-      <button data-val="sharp" class="active">シャープ</button>
-    </div>
+    <!-- 表示タブ -->
+    <div class="tab-panel" id="tab-display">
+      <h2>ビュー</h2>
+      <div class="toggle" id="viewToggle">
+        <button data-val="circle" class="active">円</button>
+        <button data-val="linear">直線</button>
+      </div>
 
-    <h2>波形ソース</h2>
-    <div class="toggle" id="pitchModeToggle">
-      <button data-val="full" class="active">全体</button>
-      <button data-val="one-period">1周期</button>
-    </div>
-    <div class="hint">1周期：自己相関法で基本周期を推定し、中央付近の1サイクルをパターンとして使用</div>
-
-    <div class="control" style="margin-top: 20px;">
-      <label><span>最大振幅（mm）</span><span class="val" id="variationVal">2.00 mm</span></label>
-      <input type="range" id="variation" min="0.1" max="5" step="0.05" value="2.0">
-      <div class="hint">印面 10.5mm に対する波形の外径振幅（±方向）</div>
-    </div>
-
-    <div class="control">
-      <label><span>フェード幅</span><span class="val" id="fadeVal">8%</span></label>
-      <input type="range" id="fade" min="0" max="30" value="8">
+      <h2>オーバーレイ</h2>
+      <div class="checks" style="display:flex;flex-direction:column;gap:6px;font-size:11px;color:#444;margin-top:4px;">
+        <label><input type="checkbox" id="showRaw"> 生波形</label>
+        <label><input type="checkbox" id="showQuant" checked> 量子化後</label>
+        <label><input type="checkbox" id="showLines"> 基準線</label>
+        <label><input type="checkbox" id="showZero"> 0ライン / 基準円</label>
+        <label><input type="checkbox" id="showSectors" checked> セクタ境界</label>
+        <label><input type="checkbox" id="showBoundaryOnCircle" checked> 子音/母音の境界</label>
+      </div>
     </div>
   </aside>
 </div>
@@ -546,7 +594,8 @@ const state = {
   logK: 5,              // log compression strength (used when spacing='log')
   lineCount: 5,
   norm: 'per-sector',   // 'per-sector' | 'global'
-  pitchMode: 'full',     // 'full' | 'one-period'
+  pitchMode: 'full',     // 'full' | 'one-period' | 'spectral'
+  spectralSmooth: 15,    // moving-average window size for spectral mode
   // View / display
   view: 'circle',       // 'linear' | 'circle'
   show: { raw: true, quant: true, lines: false, zero: false, sectors: true },
@@ -810,7 +859,38 @@ setupToggle('snapModeToggle', 'snapMode');
 setupToggle('connectToggle', 'connect');
 setupToggle('spacingToggle', 'spacing');
 setupToggle('normToggle', 'norm');
-setupToggle('pitchModeToggle', 'pitchMode');
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+function updatePitchModeHint() {
+  const hints = {
+    'full': '',
+    'one-period': '自己相関法で基本周期を推定し、中央付近の1サイクルをパターンとして使用',
+    'spectral': '低域 / 中域 / 高域（100-800Hz・800-3kHz・3kHz+）を3本の同心円にマッピング',
+  };
+  const el = document.getElementById('pitchModeHint');
+  if (el) el.textContent = hints[state.pitchMode] || '';
+  const ctrl = document.getElementById('spectralSmoothCtrl');
+  if (ctrl) ctrl.style.display = state.pitchMode === 'spectral' ? 'block' : 'none';
+}
+setupToggle('pitchModeToggle', 'pitchMode', updatePitchModeHint);
+
+(() => {
+  const slider = document.getElementById('spectralSmooth');
+  const valEl = document.getElementById('spectralSmoothVal');
+  slider.addEventListener('input', () => {
+    state.spectralSmooth = parseInt(slider.value, 10);
+    valEl.textContent = slider.value;
+    updateAll();
+  });
+})();
 
 function setupSlider(id, key, scale, suffix, valId) {
   const slider = document.getElementById(id);
@@ -1021,6 +1101,114 @@ function interpolateAt(idx, ptsOrSamples, isControlPoints) {
 }
 
 // ============================================================
+// FFT (Cooley-Tukey radix-2, in-place)
+// ============================================================
+function fft(re, im) {
+  const N = re.length;
+  for (let i = 1, j = 0; i < N; i++) {
+    let bit = N >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+  }
+  for (let len = 2; len <= N; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < N; i += len) {
+      let cRe = 1, cIm = 0;
+      for (let j = 0; j < (len >> 1); j++) {
+        const h = i + j + (len >> 1);
+        const vRe = re[h] * cRe - im[h] * cIm, vIm = re[h] * cIm + im[h] * cRe;
+        re[h] = re[i+j] - vRe; im[h] = im[i+j] - vIm;
+        re[i+j] += vRe; im[i+j] += vIm;
+        const nr = cRe * wRe - cIm * wIm; cIm = cRe * wIm + cIm * wRe; cRe = nr;
+      }
+    }
+  }
+}
+
+// Compute 3-band (low/mid/high) energy envelopes over time.
+// Returns [lowBand, midBand, highBand] each Float32Array of length numFrames, normalized 0-1.
+const SPECTRAL_BANDS = [
+  { lo: 100,  hi: 800  },
+  { lo: 800,  hi: 3000 },
+  { lo: 3000, hi: 20000 },
+];
+const FFT_WIN = 512;
+
+function computeBandEnergies(samples, sampleRate, numFrames) {
+  const freqRes = sampleRate / FFT_WIN;
+  const bandBins = SPECTRAL_BANDS.map(b => ({
+    lo: Math.max(0, Math.floor(b.lo / freqRes)),
+    hi: Math.min(FFT_WIN / 2 - 1, Math.ceil(b.hi / freqRes)),
+  }));
+  const result = [new Float32Array(numFrames), new Float32Array(numFrames), new Float32Array(numFrames)];
+  const re = new Float32Array(FFT_WIN), im = new Float32Array(FFT_WIN);
+
+  for (let f = 0; f < numFrames; f++) {
+    const center = Math.floor((f + 0.5) * samples.length / numFrames);
+    const start = Math.max(0, center - FFT_WIN / 2);
+    // Per-frame DC removal (otherwise bin 0 leaks into low band)
+    let mean = 0, cnt = 0;
+    for (let i = 0; i < FFT_WIN; i++) {
+      const si = start + i;
+      if (si < samples.length) { mean += samples[si]; cnt++; }
+    }
+    if (cnt > 0) mean /= cnt;
+    for (let i = 0; i < FFT_WIN; i++) {
+      const si = start + i;
+      const hann = 0.5 * (1 - Math.cos(2 * Math.PI * i / (FFT_WIN - 1)));
+      re[i] = si < samples.length ? (samples[si] - mean) * hann : 0;
+      im[i] = 0;
+    }
+    fft(re, im);
+    for (let b = 0; b < 3; b++) {
+      let e = 0;
+      for (let k = bandBins[b].lo; k <= bandBins[b].hi; k++) e += re[k]*re[k] + im[k]*im[k];
+      result[b][f] = Math.sqrt(e);
+    }
+  }
+  // Moving average smoothing to suppress F0-related sampling jitter
+  const smoothWin = Math.max(1, state.spectralSmooth | 0);
+  const half = Math.floor(smoothWin / 2);
+  for (let b = 0; b < 3; b++) {
+    const src = result[b];
+    const sm = new Float32Array(numFrames);
+    for (let i = 0; i < numFrames; i++) {
+      let sum = 0, cnt = 0;
+      for (let j = -half; j <= half; j++) {
+        const k = i + j;
+        if (k >= 0 && k < numFrames) { sum += src[k]; cnt++; }
+      }
+      sm[i] = sum / cnt;
+    }
+    result[b] = sm;
+  }
+  for (let b = 0; b < 3; b++) {
+    let peak = 0;
+    for (let i = 0; i < numFrames; i++) if (result[b][i] > peak) peak = result[b][i];
+    if (peak > 0) for (let i = 0; i < numFrames; i++) result[b][i] /= peak;
+  }
+  return result;
+}
+
+// Build spectral data: per-slot, 3 band energy envelopes.
+function buildSpectralData() {
+  const N = state.slots.length;
+  if (N === 0) return null;
+  const sectorRes = Math.floor(state.resolution / Math.max(1, N));
+  const slots = state.slots.map(slot => {
+    if (!slot.buffer) return null;
+    const samples = slot.buffer.getChannelData(0);
+    const tr = effectiveTrim(slot);
+    if (!tr || tr.end <= tr.start) return null;
+    return computeBandEnergies(samples.slice(tr.start, tr.end), slot.buffer.sampleRate, sectorRes);
+  });
+  if (!slots.some(s => s)) return null;
+  return { slots, sectorRes };
+}
+
+// ============================================================
 // Autocorrelation-based pitch period extraction
 // ============================================================
 // Returns {start, end} sample indices within `samples`, or null if no clear pitch.
@@ -1032,15 +1220,25 @@ function findOnePeriodRange(samples, sampleRate) {
   const winLen = Math.floor(samples.length * 0.5);
   if (winLen < maxLag * 2 || winLen < 4) return null;
 
+  // DC removal on analysis window
+  let mean = 0;
+  for (let i = start; i < start + winLen; i++) mean += samples[i];
+  mean /= winLen;
+  const buf = new Float32Array(winLen);
+  for (let i = 0; i < winLen; i++) buf[i] = samples[start + i] - mean;
+
   let r0 = 0;
-  for (let i = start; i < start + winLen; i++) r0 += samples[i] * samples[i];
+  for (let i = 0; i < winLen; i++) r0 += buf[i] * buf[i];
   if (r0 === 0) return null;
 
+  // Biased ACF (avoids octave-down errors)
   let bestLag = -1;
   let bestCorr = 0.3;
-  for (let lag = minLag; lag <= maxLag && start + lag + winLen <= samples.length; lag++) {
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    if (lag >= winLen) break;
+    const M = winLen - lag;
     let r = 0;
-    for (let i = start; i < start + winLen; i++) r += samples[i] * samples[i + lag];
+    for (let i = 0; i < M; i++) r += buf[i] * buf[i + lag];
     const norm = r / r0;
     if (norm > bestCorr) { bestCorr = norm; bestLag = lag; }
   }
@@ -1165,9 +1363,19 @@ function drawShape() {
     return;
   }
 
+  if (state.pitchMode === 'spectral') {
+    const spectral = buildSpectralData();
+    const hasAny = spectral !== null;
+    if (state.view === 'linear') drawSpectralLinear(W, H, spectral);
+    else drawSpectralCircle(W, H, spectral);
+    document.getElementById('exportSvg').disabled = !hasAny;
+    const recordedCount = state.slots.filter(s => s.buffer).length;
+    document.getElementById('status').textContent = `録音済 ${recordedCount} / ${state.slots.length}`;
+    return;
+  }
+
   const data = buildSectorOffsets();
   const hasAny = data && data.sectors.some(s => s);
-  // Apply outward-only direction by taking absolute values of samples
   if (hasAny && state.direction === 'outward') {
     for (const sec of data.sectors) {
       if (!sec) continue;
@@ -1383,6 +1591,158 @@ function drawShapeClosed(cx, cy, baseR, variation, sectors, N, color, lw) {
     }
   }
   if (started) { ctx.closePath(); ctx.stroke(); }
+}
+
+// ============================================================
+// Spectral (3-band) drawing
+// ============================================================
+const BAND_COLORS = ['#4a9eff', '#5cff8a', '#ff9a3c'];
+const BAND_LABELS = ['低域 100-800Hz', '中域 800-3kHz', '高域 3kHz+'];
+// Ring base radii as fractions of baseR (each ring starts here, deforms outward)
+const BAND_BASE_FRACS = [1.00, 1.00, 1.00];
+
+function drawSpectralCircle(W, H, spectral) {
+  const z = state.circleZoom;
+  const cx = W / 2 + state.circleOffsetX, cy = H / 2 + state.circleOffsetY;
+  const baseR = SEAL_RADIUS_MM * MM_TO_PX * z;
+  const variation = state.variationMm * MM_TO_PX * z;
+  const N = state.slots.length;
+
+  // Physical scale bar
+  ctx.save();
+  const barLen = 10 * MM_TO_PX * z;
+  ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(16, 24); ctx.lineTo(16 + barLen, 24);
+  ctx.moveTo(16, 21); ctx.lineTo(16, 27); ctx.moveTo(16+barLen, 21); ctx.lineTo(16+barLen, 27);
+  ctx.stroke();
+  ctx.fillStyle = '#666'; ctx.font = '10px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText(`10mm  印面 ${SEAL_DIAMETER_MM}mm  ×${z.toFixed(1)}`, 22 + barLen, 24);
+  ctx.restore();
+
+  // Reference circles for each ring base
+  for (let b = 0; b < 3; b++) {
+    ctx.strokeStyle = BAND_COLORS[b] + '28';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.arc(cx, cy, BAND_BASE_FRACS[b] * baseR, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  // Sector dividers + char labels
+  if (state.show.sectors) {
+    ctx.strokeStyle = '#e8e8e8'; ctx.lineWidth = 1;
+    for (let i = 0; i < N; i++) {
+      const angle = -Math.PI / 2 + (i / N) * Math.PI * 2;
+      ctx.beginPath(); ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(angle) * baseR * 1.4, cy + Math.sin(angle) * baseR * 1.4); ctx.stroke();
+    }
+  }
+  ctx.fillStyle = '#999'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let i = 0; i < N; i++) {
+    const angle = -Math.PI / 2 + ((i + 0.5) / N) * Math.PI * 2;
+    ctx.fillText(state.slots[i].char, cx + Math.cos(angle) * baseR * 1.52, cy + Math.sin(angle) * baseR * 1.52);
+  }
+
+  if (!spectral) {
+    ctx.fillStyle = '#bbb'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('録音すると形が現れます', cx, cy); return;
+  }
+
+  // Draw 3 rings (inner to outer)
+  for (let b = 0; b < 3; b++) {
+    ctx.strokeStyle = BAND_COLORS[b];
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    let started = false;
+    const ringBaseR = BAND_BASE_FRACS[b] * baseR;
+    for (let s = 0; s < N; s++) {
+      const bands = spectral.slots[s];
+      if (!bands) continue;
+      const data = bands[b];
+      const len = data.length;
+      const secStart = -Math.PI / 2 + (s / N) * Math.PI * 2;
+      const secSpan = (1 / N) * Math.PI * 2;
+      for (let i = 0; i < len; i++) {
+        const angle = secStart + (i / len) * secSpan;
+        const r = ringBaseR + data[i] * variation;
+        const x = cx + Math.cos(angle) * r, y = cy + Math.sin(angle) * r;
+        if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+      }
+    }
+    if (started) { ctx.closePath(); ctx.stroke(); }
+  }
+
+  // Legend
+  ctx.font = '10px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  for (let b = 0; b < 3; b++) {
+    ctx.fillStyle = BAND_COLORS[b];
+    ctx.fillText(BAND_LABELS[b], 16, 40 + b * 14);
+  }
+}
+
+function drawSpectralLinear(W, H, spectral) {
+  const padL = LIN_PAD.L, padR = LIN_PAD.R, padT = LIN_PAD.T, padB = LIN_PAD.B;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const N = state.slots.length;
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(padL, padT - 2, innerW, innerH + 4); ctx.clip();
+
+  if (!spectral) {
+    ctx.restore();
+    ctx.fillStyle = '#bbb'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('録音すると波形が現れます', W / 2, H / 2);
+    return;
+  }
+
+  // Each band gets its own horizontal lane (top=high, bottom=low)
+  const laneH = innerH / 3;
+  for (let b = 2; b >= 0; b--) {
+    const laneY = padT + (2 - b) * laneH;
+    const cy = laneY + laneH / 2;
+    const ampH = laneH / 2 * 0.85;
+
+    // Lane background
+    ctx.fillStyle = b % 2 === 0 ? '#f8f8f8' : '#fff';
+    ctx.fillRect(padL, laneY, innerW, laneH);
+
+    // Band label
+    ctx.fillStyle = BAND_COLORS[b]; ctx.font = '10px sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(BAND_LABELS[b], padL + 4, laneY + 3);
+
+    // Sector dividers
+    for (let s = 1; s < N; s++) {
+      const x = padL + (s / N) * innerW;
+      ctx.strokeStyle = '#ddd'; ctx.lineWidth = 1; ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.moveTo(x, laneY); ctx.lineTo(x, laneY + laneH); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    // Char labels (only in bottom lane)
+    if (b === 0) {
+      for (let s = 0; s < N; s++) {
+        const x0 = padL + (s / N) * innerW, x1 = padL + ((s+1) / N) * innerW;
+        ctx.fillStyle = '#999'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText(state.slots[s].char, (x0+x1)/2, laneY + laneH + 4);
+      }
+    }
+
+    // Waveform
+    ctx.strokeStyle = BAND_COLORS[b]; ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    let started = false;
+    for (let s = 0; s < N; s++) {
+      const bands = spectral.slots[s];
+      if (!bands) continue;
+      const data = bands[b];
+      for (let i = 0; i < data.length; i++) {
+        const frac = (s + i / data.length) / N;
+        const x = padL + frac * innerW;
+        const y = cy - data[i] * ampH;
+        if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+      }
+    }
+    if (started) ctx.stroke();
+  }
+  ctx.restore();
 }
 
 // ============================================================
@@ -2571,6 +2931,7 @@ function syncUIFromState() {
   setActive('normToggle', state.norm);
   setActive('directionToggle', state.direction);
   setActive('pitchModeToggle', state.pitchMode);
+  updatePitchModeHint();
 
   // Sliders
   document.getElementById('variation').value = state.variationMm;
