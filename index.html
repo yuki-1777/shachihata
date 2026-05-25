@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>聲印プロジェクト</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Helvetica Neue", sans-serif;
+    background: #fafafa;
+    color: #222;
+    font-size: 15px;
+    line-height: 1.65;
+  }
+  header {
+    background: #fff;
+    border-bottom: 1px solid #e5e5e5;
+    padding: 24px 32px;
+  }
+  header h1 { font-size: 22px; margin: 0; font-weight: 600; letter-spacing: 0.02em; }
+  header p { margin: 6px 0 0; font-size: 14px; color: #888; }
+  main {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 28px 24px 60px;
+  }
+  .section-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin: 26px 0 14px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+  }
+  .card {
+    display: block;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    padding: 18px 20px 16px;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.1s, box-shadow 0.1s, transform 0.1s;
+  }
+  .card:hover {
+    border-color: #2563eb;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+  }
+  .card.archive { background: #f5f5f5; }
+  .card.archive:hover { border-color: #888; box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
+  .card h3 {
+    margin: 0 0 6px;
+    font-size: 17px;
+    font-weight: 600;
+    color: #222;
+  }
+  .card .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 10px;
+    background: #2563eb;
+    color: #fff;
+    border-radius: 3px;
+    margin-bottom: 8px;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+  }
+  .card.archive .tag { background: #999; }
+  .card .desc {
+    font-size: 13px;
+    color: #555;
+    line-height: 1.65;
+    margin: 0 0 10px;
+  }
+  .card .meta {
+    font-size: 11px;
+    color: #888;
+    font-family: ui-monospace, monospace;
+  }
+  .card .meta b { color: #555; font-weight: 600; }
+  .intro {
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-left: 4px solid #2563eb;
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: #444;
+  }
+  .intro b { color: #222; }
+</style>
+</head>
+<body>
+<header>
+  <h1>聲印 プロジェクト</h1>
+  <p>声を印鑑のかたちに変換する研究と、その途上で生まれた音声処理学習ツール群</p>
+</header>
+
+<main>
+
+<div class="intro">
+  <b>目的</b>：人の声を音響的に分析し、その特徴（フォルマント・ピッチ・声道形状など）を印鑑の輪郭に反映させる。<br>
+  最終的には「自分の声で作る印鑑」になることを目指している。各ツールはその過程で検討した方向性や、学習用に作った可視化ツール。
+</div>
+
+<div class="section-title">メインツール</div>
+<div class="grid">
+
+  <a class="card" href="voice_seal_v2.html">
+    <span class="tag">本命</span>
+    <h3>聲印 v2 — 形状生成ツール</h3>
+    <p class="desc">名前を録音すると、各文字の波形・スペクトル特徴を印鑑の輪郭に変換するメインツール。3帯域モード（低・中・高域を3本の同心円に）、1周期モード（自己相関で抽出した1周期をパターン化）、量子化、対数間隔基準線などを搭載。</p>
+    <div class="meta"><b>機能</b> 録音 / 波形分析 / SVGエクスポート / 3表示モード</div>
+  </a>
+
+  <a class="card" href="voice_seal_v3.html">
+    <span class="tag">v3</span>
+    <h3>聲印 v3 — 多モード版（FFT10点・MFCC・音素ほか）</h3>
+    <p class="desc">v2を発展させた版。形状モードに「FFT10点（音素ごとに対数間隔10点をサンプリングして花びら状の形を生成）」「MFCC」「音素軌跡」「フォルマント」「STFT」など多数を搭載。複数録音の品質マーク＋平均化対応、印影文字（縦書き朱色）の埋め込みも可能。</p>
+    <div class="meta"><b>機能</b> 録音 / 多モード形状 / 複数録音平均 / SVG＋文字エクスポート</div>
+  </a>
+
+</div>
+
+<div class="section-title">学習・実験ツール</div>
+<div class="grid">
+
+  <a class="card" href="voice_analyzer.html">
+    <span class="tag">教育</span>
+    <h3>声の分析ラボ</h3>
+    <p class="desc">録音した声を「波形・スペクトル・スペクトログラム」の3視点で観察。F0、F1、F2、スペクトル重心、ZCR、推定母音などの特徴量をリアルタイム表示。各専門用語に中学生向け解説モーダル付き。1本線プレビューで「印鑑の輪郭に何を使うか」を試せる。</p>
+    <div class="meta"><b>機能</b> 録音 / 合成母音 / 3視点ビュー / 特徴量表示 / 解説</div>
+  </a>
+
+  <a class="card" href="mfcc_walkthrough.html">
+    <span class="tag">教育</span>
+    <h3>MFCC を見てみよう</h3>
+    <p class="desc">音声認識・話者認識で標準的に使われる「MFCC（メル周波数ケプストラム係数）」が、録音波形からどう計算されるかを9ステップで可視化。波形 → 窓掛け → FFT → メルフィルタ → log → DCT の各段の入力と出力をビジュアルで追える。</p>
+    <div class="meta"><b>機能</b> 録音 / 合成母音 / 9ステップ可視化 / 各段の説明</div>
+  </a>
+
+  <a class="card" href="pattern_generator.html">
+    <span class="tag">設計</span>
+    <h3>パターン生成ラボ</h3>
+    <p class="desc">「子音の音響的性質（点の数・高さ・鋭さ）から自動で形が決まる」ジェネラティブな50音パターン生成ツール。子音セクション幅、子音高さ、母音振幅、線太さなどをスライダーで調整して全パターンに即時反映。直線/円表示切替あり。</p>
+    <div class="meta"><b>機能</b> 50音パターン / ルールベース生成 / リアルタイム調整</div>
+  </a>
+
+  <a class="card" href="voice_pattern_synth.html">
+    <span class="tag">本命候補</span>
+    <h3>声紋パターン合成</h3>
+    <p class="desc">「ルールベースの基本パターン × 録音した声のMFCC変調」のハイブリッド方式。文字ごとに録音すると、子音/母音境界を自動検出してそれぞれのMFCCを計算し、基本パターンに「その人の声色」を変調として加える。変調ON/OFF切替で純粋なルール版と比較可能。</p>
+    <div class="meta"><b>機能</b> 録音 / 子音母音分離 / MFCC変調 / ハイブリッド合成</div>
+  </a>
+
+  <a class="card" href="mel_sum_lab.html">
+    <span class="tag">実験</span>
+    <h3>メル帯域合算ラボ</h3>
+    <p class="desc">声をメルスペクトログラムに分解し、好きな帯域をクリックでON/OFFして時間方向に足し算 → 1本の輪郭線にマッピングする実験ツール。「低域だけ」「子音帯域だけ」など組み合わせを試して印鑑形の質感を探る。</p>
+    <div class="meta"><b>機能</b> メル分解 / 帯域選択 / 合算 / 円マッピング</div>
+  </a>
+
+</div>
+
+<div class="section-title">アーカイブ（古いプロトタイプ）</div>
+<div class="grid">
+
+  <a class="card archive" href="voice_seal.html">
+    <span class="tag">v1</span>
+    <h3>聲印 v1（旧版）</h3>
+    <p class="desc">最初に作った印鑑生成ツール。v2 の前身。シンプルな波形→輪郭変換の原型を確認する用。</p>
+  </a>
+
+  <a class="card archive" href="quantize_demo.html">
+    <span class="tag">実験</span>
+    <h3>量子化デモ</h3>
+    <p class="desc">波形を等間隔/対数間隔の基準線にスナップさせる量子化処理の実験デモ。後に v2 に統合された。</p>
+  </a>
+
+  <a class="card archive" href="envelope_demo.html">
+    <span class="tag">実験</span>
+    <h3>エンベロープデモ</h3>
+    <p class="desc">音量エンベロープ抽出の検討用デモ。</p>
+  </a>
+
+</div>
+
+</main>
+</body>
+</html>

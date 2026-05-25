@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>パターン生成ラボ</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Helvetica Neue", sans-serif;
+    background: #fafafa;
+    color: #222;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr 320px;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+  }
+  header {
+    grid-column: 1 / -1;
+    padding: 14px 24px;
+    background: #fff;
+    border-bottom: 1px solid #e5e5e5;
+  }
+  header h1 { font-size: 19px; margin: 0; font-weight: 600; letter-spacing: 0.02em; }
+  header p { margin: 4px 0 0; font-size: 13px; color: #888; }
+
+  aside {
+    padding: 18px;
+    background: #fff;
+    overflow-y: auto;
+  }
+  aside.left { border-right: 1px solid #e5e5e5; }
+  aside.right { border-left: 1px solid #e5e5e5; }
+
+  main {
+    padding: 18px;
+    overflow-y: auto;
+    background: #fafafa;
+  }
+
+  h2 {
+    font-size: 12px;
+    font-weight: 600;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin: 20px 0 10px;
+  }
+  h2:first-child { margin-top: 0; }
+
+  .hint {
+    font-size: 12px;
+    color: #888;
+    line-height: 1.6;
+    margin-top: 6px;
+  }
+
+  /* sliders */
+  .ctrl-row { margin-bottom: 14px; }
+  .ctrl-row label {
+    display: block;
+    font-size: 13px;
+    color: #444;
+    margin-bottom: 4px;
+  }
+  .ctrl-row .val {
+    float: right;
+    color: #2563eb;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  input[type="range"] { width: 100%; }
+
+  /* Toggle */
+  .toggle {
+    display: flex;
+    gap: 4px;
+    background: #f0f0f0;
+    padding: 3px;
+    border-radius: 5px;
+  }
+  .toggle button {
+    flex: 1;
+    background: none;
+    border: none;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 3px;
+    color: #555;
+    font-family: inherit;
+  }
+  .toggle button.active {
+    background: #fff;
+    color: #222;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    font-weight: 600;
+  }
+
+  /* Grid */
+  .grid-section { margin-bottom: 26px; }
+  .grid-section h3 {
+    font-size: 12px;
+    color: #888;
+    margin: 0 0 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 28px repeat(5, 1fr);
+    gap: 6px 8px;
+  }
+  .col-label {
+    text-align: center;
+    font-size: 14px;
+    color: #888;
+    padding: 4px 0;
+    font-weight: 500;
+  }
+  .row-label {
+    align-self: center;
+    text-align: right;
+    padding-right: 4px;
+    font-size: 13px;
+    color: #888;
+    font-weight: 500;
+  }
+  .cell {
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    padding: 6px 4px 4px;
+    cursor: pointer;
+    transition: border-color 0.1s, box-shadow 0.1s;
+    text-align: center;
+  }
+  .cell:hover { border-color: #999; }
+  .cell.selected { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15); }
+  .cell.empty { background: transparent; border-color: transparent; cursor: default; }
+  .cell-char {
+    font-size: 16px;
+    font-weight: 600;
+    color: #222;
+    margin-bottom: 2px;
+  }
+  .cell canvas {
+    display: block;
+    width: 100%;
+    height: 44px;
+  }
+
+  /* Zoom view */
+  #zoomCanvas {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1.6;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+  }
+  .zoom-info {
+    margin-top: 12px;
+    font-size: 13px;
+    color: #444;
+    line-height: 1.8;
+  }
+  .zoom-info .key { color: #888; display: inline-block; min-width: 90px; }
+  .zoom-info .val { color: #2563eb; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .zoom-char {
+    font-size: 36px;
+    font-weight: 600;
+    text-align: center;
+    margin: 4px 0 12px;
+  }
+</style>
+</head>
+<body>
+<div style="position:fixed;top:8px;left:12px;z-index:200;"><a href="index.html" style="font-size:11px;color:#666;text-decoration:none;background:rgba(255,255,255,0.95);padding:4px 10px;border:1px solid #e5e5e5;border-radius:4px;font-family:-apple-system,sans-serif;">← トップ</a></div>
+
+<header>
+  <h1>パターン生成ラボ</h1>
+  <p>3軸ルール（① 点の数 ② 点の高さ ③ 点の鋭さ）で50音パターンを生成。子音の音響的性質から自動で形が決まる。</p>
+</header>
+
+<div class="layout">
+<aside class="left">
+  <h2>表示</h2>
+  <div class="toggle" id="viewToggle">
+    <button data-val="linear" class="active">直線</button>
+    <button data-val="circle">円（印面）</button>
+  </div>
+
+  <h2>子音セクション幅</h2>
+  <div class="ctrl-row">
+    <label>子音部の幅 <span class="val" id="consWidthVal">28%</span></label>
+    <input type="range" id="consWidth" min="10" max="50" value="28">
+    <div class="hint">セクタの先頭から何%を子音部に使うか</div>
+  </div>
+
+  <h2>全体パラメータ</h2>
+  <div class="ctrl-row">
+    <label>子音の高さスケール <span class="val" id="consHeightVal">0.9</span></label>
+    <input type="range" id="consHeight" min="0.3" max="1.5" step="0.05" value="0.9">
+    <div class="hint">k/sなど高い系の絶対値、n/mなど低い系の絶対値の倍率</div>
+  </div>
+  <div class="ctrl-row">
+    <label>母音の振幅 <span class="val" id="vowelAmpVal">0.7</span></label>
+    <input type="range" id="vowelAmp" min="0.3" max="1.2" step="0.05" value="0.7">
+  </div>
+  <div class="ctrl-row">
+    <label>線の太さ <span class="val" id="strokeVal">1.5</span></label>
+    <input type="range" id="stroke" min="0.5" max="4" step="0.1" value="1.5">
+  </div>
+
+  <h2>濁点/半濁点</h2>
+  <div class="hint">
+    <b>濁音</b>：子音部にもう1本の平行線を追加<br>
+    <b>半濁音(ぱ行)</b>：子音部の点に○マーカーを追加
+  </div>
+</aside>
+
+<main>
+  <div class="grid-section">
+    <h3>清音</h3>
+    <div class="grid" id="seion"></div>
+  </div>
+  <div class="grid-section">
+    <h3>濁音</h3>
+    <div class="grid" id="dakuon"></div>
+  </div>
+  <div class="grid-section">
+    <h3>半濁音</h3>
+    <div class="grid" id="handakuon"></div>
+  </div>
+</main>
+
+<aside class="right">
+  <h2>選択中の文字</h2>
+  <div class="zoom-char" id="zoomChar">あ</div>
+  <canvas id="zoomCanvas" width="600" height="380"></canvas>
+
+  <h2>パラメータ</h2>
+  <div class="zoom-info" id="zoomInfo"></div>
+
+  <h2>ルールの読み方</h2>
+  <div class="hint" style="line-height:1.75;">
+    <b>子音 = 出だしの形</b><br>
+    ・<b>点の数</b>：1=なめらか／3〜5=ザラザラ<br>
+    ・<b>点の高さ</b>：上=高音 / 下=低音<br>
+    ・<b>点の鋭さ</b>：丸=なめらか / 尖=破裂<br><br>
+    <b>母音 = 残りの形</b><br>
+    あ=大きい丸／い=細く高い／う=小さい／え=中＋偏り／お=中の丸
+  </div>
+</aside>
+</div>
+
+<script>
+// ============================================================
+// Rule definitions (3 axes per consonant)
+// ============================================================
+// kind: 'none' | 'spike' | 'noise' | 'soft' | 'glide' | 'tap'
+const CONSONANTS = {
+  '':  { kind: 'none',  points: 0, height: 0,    sharp: 0,    label: 'なし（母音単独）' },
+  'k': { kind: 'spike', points: 1, height: 0.9,  sharp: 1.0,  label: 'k（破裂・無声）' },
+  's': { kind: 'noise', points: 5, height: 0.75, sharp: 0.2,  label: 's（摩擦・無声）' },
+  't': { kind: 'spike', points: 1, height: 0.65, sharp: 0.85, label: 't（破裂・無声）' },
+  'n': { kind: 'soft',  points: 1, height: -0.35,sharp: 0.15, label: 'n（鼻音・有声）' },
+  'h': { kind: 'noise', points: 3, height: 0.4,  sharp: 0.15, label: 'h（摩擦・無声）' },
+  'm': { kind: 'soft',  points: 1, height: -0.4, sharp: 0.15, label: 'm（鼻音・有声）' },
+  'y': { kind: 'glide', points: 1, height: 0.25, sharp: 0,    label: 'y（半母音）' },
+  'r': { kind: 'tap',   points: 1, height: 0.3,  sharp: 0.5,  label: 'r（弾き音）' },
+  'w': { kind: 'glide', points: 1, height: 0.2,  sharp: 0,    label: 'w（半母音）' },
+};
+
+// Vowel base curves: amp = peak height, peakX = where peak sits in [0,1], spread = width
+const VOWELS = {
+  'a': { amp: 1.00, peakX: 0.50, spread: 0.55, kind: 'round',  label: 'あ（大きい丸）' },
+  'i': { amp: 0.95, peakX: 0.45, spread: 0.22, kind: 'sharp',  label: 'い（細く高い）' },
+  'u': { amp: 0.40, peakX: 0.50, spread: 0.40, kind: 'small',  label: 'う（小さい）' },
+  'e': { amp: 0.65, peakX: 0.60, spread: 0.40, kind: 'lean',   label: 'え（中＋偏り）' },
+  'o': { amp: 0.70, peakX: 0.45, spread: 0.42, kind: 'round',  label: 'お（中の丸）' },
+};
+
+// 五十音 mapping
+const TABLE = {
+  seion: [
+    // [consonant key, chars by vowel]
+    { c: '', chars: ['あ','い','う','え','お'] },
+    { c: 'k', chars: ['か','き','く','け','こ'] },
+    { c: 's', chars: ['さ','し','す','せ','そ'] },
+    { c: 't', chars: ['た','ち','つ','て','と'] },
+    { c: 'n', chars: ['な','に','ぬ','ね','の'] },
+    { c: 'h', chars: ['は','ひ','ふ','へ','ほ'] },
+    { c: 'm', chars: ['ま','み','む','め','も'] },
+    { c: 'y', chars: ['や',null,'ゆ',null,'よ'] },
+    { c: 'r', chars: ['ら','り','る','れ','ろ'] },
+    { c: 'w', chars: ['わ',null,null,null,'を'] },
+  ],
+  dakuon: [
+    { c: 'k', chars: ['が','ぎ','ぐ','げ','ご'], voiced: true },
+    { c: 's', chars: ['ざ','じ','ず','ぜ','ぞ'], voiced: true },
+    { c: 't', chars: ['だ','ぢ','づ','で','ど'], voiced: true },
+    { c: 'h', chars: ['ば','び','ぶ','べ','ぼ'], voiced: true },
+  ],
+  handakuon: [
+    { c: 'h', chars: ['ぱ','ぴ','ぷ','ぺ','ぽ'], halfVoiced: true },
+  ],
+};
+
+const VOWEL_KEYS = ['a','i','u','e','o'];
+
+// ============================================================
+// Global parameters
+// ============================================================
+const params = {
+  view: 'linear',
+  consWidth: 0.28,
+  consHeight: 0.9,
+  vowelAmp: 0.7,
+  stroke: 1.5,
+};
+let selected = { char: 'あ', cKey: '', vKey: 'a', voiced: false, halfVoiced: false };
+
+// ============================================================
+// Pattern generation
+// ============================================================
+
+// Generate (x, y) control points for the consonant section of the path
+// xRange: [0, consWidth]
+// Returns array of {x, y, sharpness}
+function generateConsonantPoints(cKey) {
+  const c = CONSONANTS[cKey];
+  if (!c || c.kind === 'none') return [];
+  const w = params.consWidth;
+  const height = c.height * params.consHeight;
+  const pts = [];
+  if (c.kind === 'spike') {
+    // single sharp spike near beginning
+    pts.push({ x: w * 0.15, y: height, sharp: c.sharp });
+  } else if (c.kind === 'noise') {
+    // multiple jittered points across the section
+    const n = c.points;
+    for (let i = 0; i < n; i++) {
+      const t = (i + 0.5) / n;
+      const xJ = (Math.sin(i * 13.7) * 0.5); // pseudo-random offset
+      const yJ = Math.sin(i * 7.3 + 1.2);    // alternates up/down a bit
+      pts.push({
+        x: w * (t + xJ * 0.06),
+        y: height * (0.6 + 0.4 * yJ),
+        sharp: c.sharp,
+      });
+    }
+  } else if (c.kind === 'soft') {
+    // single low bump
+    pts.push({ x: w * 0.5, y: height, sharp: c.sharp });
+  } else if (c.kind === 'glide') {
+    // ramp up - represented as a single anchor at end of consonant section
+    pts.push({ x: w * 0.9, y: height, sharp: 0 });
+  } else if (c.kind === 'tap') {
+    // short dip-and-rise at center
+    pts.push({ x: w * 0.5, y: height, sharp: c.sharp });
+  }
+  return pts;
+}
+
+// Generate (x, y) points for the vowel section
+function generateVowelPoints(vKey) {
+  const v = VOWELS[vKey];
+  const x0 = params.consWidth;
+  const xW = 1 - x0;
+  const amp = v.amp * params.vowelAmp;
+  const peakX = x0 + xW * v.peakX;
+  const pts = [];
+  if (v.kind === 'sharp') {
+    // narrow sharp peak (for い)
+    pts.push({ x: x0 + xW * 0.2, y: amp * 0.4, sharp: 0.6 });
+    pts.push({ x: peakX, y: amp, sharp: 0.8 });
+    pts.push({ x: x0 + xW * 0.75, y: amp * 0.3, sharp: 0.4 });
+  } else if (v.kind === 'small') {
+    // small subtle hump (for う)
+    pts.push({ x: peakX, y: amp, sharp: 0.2 });
+  } else if (v.kind === 'lean') {
+    // bump biased to later (for え)
+    pts.push({ x: x0 + xW * 0.3, y: amp * 0.3, sharp: 0.2 });
+    pts.push({ x: peakX, y: amp, sharp: 0.3 });
+  } else {
+    // round (for あ, お)
+    pts.push({ x: peakX, y: amp, sharp: 0.2 });
+  }
+  return pts;
+}
+
+// Convert control points into a smooth path's x,y arrays for rendering
+function buildPathSamples(points, samples = 200) {
+  // Insert anchors at start and end of unit interval at y=0
+  const anchors = [{x: 0, y: 0, sharp: 0}, ...points, {x: 1, y: 0, sharp: 0}];
+  anchors.sort((a, b) => a.x - b.x);
+
+  // For sharpness influence: at each point, the shape becomes a Gaussian whose width is
+  // narrower when sharp is higher.  The final y is the sum of these Gaussians.
+  // baseline y=0 plus sum_i amp_i * exp(-((x - xi)/sigma_i)^2)
+  const ys = new Float32Array(samples);
+  for (let s = 0; s < samples; s++) {
+    const x = s / (samples - 1);
+    let y = 0;
+    for (const p of points) {
+      // width: sharp=1 → very narrow; sharp=0 → very wide
+      const sigma = 0.18 - p.sharp * 0.155; // 0.025..0.18
+      const d = (x - p.x) / sigma;
+      y += p.y * Math.exp(-d * d);
+    }
+    ys[s] = y;
+  }
+  return ys;
+}
+
+// ============================================================
+// Rendering
+// ============================================================
+function drawPattern(canvas, cKey, vKey, voiced = false, halfVoiced = false) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0) return;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = rect.width, H = rect.height;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+
+  if (params.view === 'linear') {
+    drawLinear(ctx, W, H, cKey, vKey, voiced, halfVoiced);
+  } else {
+    drawCircle(ctx, W, H, cKey, vKey, voiced, halfVoiced);
+  }
+}
+
+function drawLinear(ctx, W, H, cKey, vKey, voiced, halfVoiced) {
+  const padL = 6, padR = 6, padT = 6, padB = 6;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const baseY = padT + plotH * 0.62;
+  const ampScale = plotH * 0.5;
+
+  const cPts = generateConsonantPoints(cKey);
+  const vPts = generateVowelPoints(vKey);
+  const all = [...cPts, ...vPts];
+  const ys = buildPathSamples(all, Math.max(80, Math.floor(plotW)));
+
+  // baseline
+  ctx.strokeStyle = '#eee';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padL, baseY);
+  ctx.lineTo(padL + plotW, baseY);
+  ctx.stroke();
+
+  // consonant section divider
+  const consX = padL + params.consWidth * plotW;
+  ctx.strokeStyle = '#f5f5f5';
+  ctx.setLineDash([2, 2]);
+  ctx.beginPath();
+  ctx.moveTo(consX, padT);
+  ctx.lineTo(consX, padT + plotH);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // path
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = params.stroke;
+  ctx.beginPath();
+  for (let i = 0; i < ys.length; i++) {
+    const x = padL + (i / (ys.length - 1)) * plotW;
+    const y = baseY - ys[i] * ampScale;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // voiced: parallel shadow line slightly offset
+  if (voiced) {
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = params.stroke * 0.8;
+    ctx.beginPath();
+    for (let i = 0; i < ys.length; i++) {
+      const x = padL + (i / (ys.length - 1)) * plotW;
+      const y = baseY - ys[i] * ampScale + 3 * params.stroke;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // half-voiced: small circle marker at consonant point
+  if (halfVoiced && cKey === 'h') {
+    const cPts = generateConsonantPoints('h');
+    for (const p of cPts) {
+      const x = padL + p.x * plotW;
+      const y = baseY - p.y * ampScale;
+      ctx.strokeStyle = '#222';
+      ctx.fillStyle = '#fff';
+      ctx.lineWidth = params.stroke * 0.8;
+      ctx.beginPath();
+      ctx.arc(x, y - 6, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+}
+
+function drawCircle(ctx, W, H, cKey, vKey, voiced, halfVoiced) {
+  // Draw one sector (1/10 of a circle) for context
+  const cx = W / 2, cy = H * 0.62;
+  const baseR = Math.min(W, H) * 0.32;
+  const variation = Math.min(W, H) * 0.18;
+  const sectorN = 10;
+  const sectorSpan = (Math.PI * 2) / sectorN;
+  const secStart = -Math.PI / 2 - sectorSpan / 2;
+
+  // sector outline (light)
+  ctx.strokeStyle = '#eee';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(cx, cy, baseR, 0, Math.PI * 2);
+  ctx.stroke();
+  for (let i = 0; i < sectorN; i++) {
+    if (i !== 0 && i !== 1) continue;
+    const a = secStart + i * sectorSpan;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(a) * baseR * 1.3, cy + Math.sin(a) * baseR * 1.3);
+    ctx.stroke();
+  }
+
+  const cPts = generateConsonantPoints(cKey);
+  const vPts = generateVowelPoints(vKey);
+  const all = [...cPts, ...vPts];
+  const ys = buildPathSamples(all, 200);
+
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = params.stroke;
+  ctx.beginPath();
+  for (let i = 0; i < ys.length; i++) {
+    const t = i / (ys.length - 1);
+    const angle = secStart + t * sectorSpan;
+    const r = baseR + ys[i] * variation;
+    const x = cx + Math.cos(angle) * r;
+    const y = cy + Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  if (voiced) {
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = params.stroke * 0.8;
+    ctx.beginPath();
+    for (let i = 0; i < ys.length; i++) {
+      const t = i / (ys.length - 1);
+      const angle = secStart + t * sectorSpan;
+      const r = baseR + ys[i] * variation - 3 * params.stroke;
+      const x = cx + Math.cos(angle) * r;
+      const y = cy + Math.sin(angle) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+}
+
+// ============================================================
+// Grid building
+// ============================================================
+function buildGrid(containerId, rows) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  // header row
+  el.appendChild(emptyDiv());
+  for (const v of ['あ', 'い', 'う', 'え', 'お']) {
+    const d = document.createElement('div');
+    d.className = 'col-label';
+    d.textContent = v;
+    el.appendChild(d);
+  }
+  // body
+  for (const row of rows) {
+    const rowKey = row.c;
+    const cName = (rowKey === '') ? 'あ' : (CONSONANTS[rowKey].label.split('（')[0]);
+    const label = document.createElement('div');
+    label.className = 'row-label';
+    label.textContent = cName;
+    el.appendChild(label);
+    for (let i = 0; i < 5; i++) {
+      const char = row.chars[i];
+      const vKey = VOWEL_KEYS[i];
+      if (char === null) {
+        el.appendChild(emptyDiv('empty-slot'));
+        continue;
+      }
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.char = char;
+      cell.dataset.c = rowKey;
+      cell.dataset.v = vKey;
+      cell.dataset.voiced = row.voiced ? '1' : '';
+      cell.dataset.halfVoiced = row.halfVoiced ? '1' : '';
+      const charEl = document.createElement('div');
+      charEl.className = 'cell-char';
+      charEl.textContent = char;
+      const cv = document.createElement('canvas');
+      cell.appendChild(charEl);
+      cell.appendChild(cv);
+      cell.addEventListener('click', () => {
+        selectCell(char, rowKey, vKey, !!row.voiced, !!row.halfVoiced);
+      });
+      el.appendChild(cell);
+    }
+  }
+}
+
+function emptyDiv(cls = 'col-label') {
+  const d = document.createElement('div');
+  d.className = cls;
+  return d;
+}
+
+function renderAllGrids() {
+  document.querySelectorAll('.cell').forEach(cell => {
+    const cv = cell.querySelector('canvas');
+    if (!cv) return;
+    drawPattern(cv, cell.dataset.c, cell.dataset.v, !!cell.dataset.voiced, !!cell.dataset.halfVoiced);
+  });
+}
+
+function selectCell(char, cKey, vKey, voiced, halfVoiced) {
+  selected = { char, cKey, vKey, voiced, halfVoiced };
+  document.querySelectorAll('.cell').forEach(c => c.classList.toggle('selected', c.dataset.char === char));
+  renderZoom();
+}
+
+function renderZoom() {
+  document.getElementById('zoomChar').textContent = selected.char;
+  drawPattern(document.getElementById('zoomCanvas'), selected.cKey, selected.vKey, selected.voiced, selected.halfVoiced);
+  // info
+  const c = CONSONANTS[selected.cKey] || CONSONANTS[''];
+  const v = VOWELS[selected.vKey];
+  let info = '';
+  info += `<div><span class="key">子音</span> <span class="val">${c.label}</span></div>`;
+  if (selected.cKey !== '') {
+    info += `<div><span class="key">　点の数</span> <span class="val">${c.points}</span></div>`;
+    info += `<div><span class="key">　点の高さ</span> <span class="val">${c.height >= 0 ? '+' : ''}${c.height.toFixed(2)}</span></div>`;
+    info += `<div><span class="key">　点の鋭さ</span> <span class="val">${c.sharp.toFixed(2)}</span></div>`;
+  }
+  info += `<div style="margin-top:8px;"><span class="key">母音</span> <span class="val">${v.label}</span></div>`;
+  info += `<div><span class="key">　振幅</span> <span class="val">${v.amp.toFixed(2)}</span></div>`;
+  info += `<div><span class="key">　ピーク位置</span> <span class="val">${(v.peakX * 100).toFixed(0)}%</span></div>`;
+  if (selected.voiced) info += `<div style="margin-top:8px;color:#dc2626;font-weight:600;">＋ 濁音（平行線追加）</div>`;
+  if (selected.halfVoiced) info += `<div style="margin-top:8px;color:#dc2626;font-weight:600;">＋ 半濁音（○マーカー）</div>`;
+  document.getElementById('zoomInfo').innerHTML = info;
+}
+
+// ============================================================
+// Parameter wiring
+// ============================================================
+function setupSlider(id, key, scale, suffix, valId) {
+  const slider = document.getElementById(id);
+  const val = document.getElementById(valId);
+  slider.addEventListener('input', () => {
+    const raw = parseFloat(slider.value);
+    params[key] = scale ? raw * scale : raw;
+    val.textContent = (typeof suffix === 'function') ? suffix(raw) : raw.toFixed(2) + (suffix || '');
+    renderAllGrids();
+    renderZoom();
+  });
+}
+setupSlider('consWidth', 'consWidth', 0.01, raw => Math.round(raw) + '%', 'consWidthVal');
+setupSlider('consHeight', 'consHeight', 1, '', 'consHeightVal');
+setupSlider('vowelAmp', 'vowelAmp', 1, '', 'vowelAmpVal');
+setupSlider('stroke', 'stroke', 1, '', 'strokeVal');
+
+document.getElementById('viewToggle').querySelectorAll('button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#viewToggle button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    params.view = b.dataset.val;
+    renderAllGrids();
+    renderZoom();
+  });
+});
+
+// ============================================================
+// Init
+// ============================================================
+buildGrid('seion', TABLE.seion);
+buildGrid('dakuon', TABLE.dakuon);
+buildGrid('handakuon', TABLE.handakuon);
+requestAnimationFrame(() => {
+  renderAllGrids();
+  selectCell('あ', '', 'a', false, false);
+});
+window.addEventListener('resize', () => { renderAllGrids(); renderZoom(); });
+</script>
+</body>
+</html>

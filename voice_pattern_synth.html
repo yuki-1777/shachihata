@@ -1,0 +1,1736 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>声紋パターン合成</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Helvetica Neue", sans-serif;
+    background: #fafafa;
+    color: #222;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  header {
+    padding: 14px 24px;
+    background: #fff;
+    border-bottom: 1px solid #e5e5e5;
+  }
+  header h1 { font-size: 19px; margin: 0; font-weight: 600; }
+  header p { margin: 4px 0 0; font-size: 13px; color: #888; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 300px 1fr 320px;
+    gap: 0;
+    height: calc(100vh - 64px);
+  }
+  aside.left, aside.right {
+    background: #fff;
+    padding: 16px;
+    overflow-y: auto;
+  }
+  aside.left { border-right: 1px solid #e5e5e5; }
+  aside.right { border-left: 1px solid #e5e5e5; }
+  main {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  h2 {
+    font-size: 12px;
+    font-weight: 600;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin: 20px 0 10px;
+  }
+  h2:first-child { margin-top: 0; }
+  .hint { font-size: 11px; color: #888; line-height: 1.6; margin-top: 6px; }
+
+  input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 15px;
+    font-family: inherit;
+  }
+  .slots { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .slot {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px;
+    background: #f5f5f5;
+    border-radius: 4px;
+    border: 1px solid #e5e5e5;
+  }
+  .slot.recording { background: #fff1ee; border-color: #c8331c; }
+  .slot.has-data { background: #f0f7f0; border-color: #d0e5d0; }
+  .slot-char { font-size: 18px; font-weight: 600; width: 28px; text-align: center; }
+  .slot-btn {
+    flex: 1; padding: 7px 8px;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer; font-size: 12px;
+    user-select: none; text-align: center;
+    font-family: inherit;
+  }
+  .slot-btn:hover { background: #f0f0f0; }
+  .slot-btn:active, .slot.recording .slot-btn { background: #c8331c; color: white; border-color: #c8331c; }
+  .slot-clear {
+    background: none; border: none; color: #888;
+    cursor: pointer; padding: 4px 6px; font-size: 14px;
+  }
+  .slot-clear:hover { color: #c8331c; }
+  .slot-info {
+    flex: 1;
+    font-size: 10px;
+    color: #555;
+    font-family: ui-monospace, monospace;
+  }
+  .slot-rerec {
+    background: #fff; border: 1px solid #ccc;
+    border-radius: 3px; padding: 4px 8px;
+    font-size: 10px; cursor: pointer; color: #555;
+    user-select: none; font-family: inherit; white-space: nowrap;
+  }
+  .slot-rerec:hover { background: #f0f0f0; }
+  .slot-rerec:active, .slot.recording .slot-rerec { background: #c8331c; color: white; border-color: #c8331c; }
+
+  .toggle {
+    display: flex; gap: 4px;
+    background: #f0f0f0;
+    padding: 3px;
+    border-radius: 5px;
+  }
+  .toggle button {
+    flex: 1; background: none; border: none;
+    padding: 6px 10px;
+    font-size: 12px; cursor: pointer;
+    border-radius: 3px; color: #555;
+    font-family: inherit;
+  }
+  .toggle button.active {
+    background: #fff; color: #222;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    font-weight: 600;
+  }
+
+  .ctrl-row { margin: 10px 0; }
+  .ctrl-row label {
+    display: block; font-size: 12px;
+    color: #555; margin-bottom: 4px;
+  }
+  .ctrl-row .val {
+    float: right; color: #2563eb;
+    font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  input[type="range"] { width: 100%; }
+
+  .canvas-wrap {
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    padding: 12px 16px;
+  }
+  .canvas-wrap h3 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #444;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    background: #fff;
+    border-radius: 4px;
+  }
+  .canvas-wrap.stamp-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .canvas-wrap.stamp-wrap canvas {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    cursor: grab;
+  }
+  .canvas-wrap.stamp-wrap canvas.grabbing { cursor: grabbing; }
+  .stamp-controls {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: rgba(255,255,255,0.92);
+    padding: 4px;
+    border-radius: 6px;
+    border: 1px solid #e5e5e5;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .stamp-controls button {
+    width: 28px;
+    height: 28px;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-family: inherit;
+    padding: 0;
+    color: #444;
+  }
+  .stamp-controls button:hover { background: #f0f0f0; }
+  .canvas-wrap.stamp-wrap { position: relative; }
+
+  /* Modal */
+  .modal-bg {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-bg.show { display: flex; }
+  .modal {
+    background: #111;
+    padding: 20px 24px;
+    border-radius: 8px;
+    width: min(92vw, 1100px);
+    color: #eee;
+  }
+  .modal-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .modal-title { font-size: 14px; font-weight: 600; }
+  .modal-title b { font-size: 22px; margin-right: 10px; }
+  .modal-close {
+    background: none;
+    border: 1px solid #555;
+    color: #ccc;
+    padding: 4px 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-family: inherit;
+  }
+  #modalCanvas {
+    display: block;
+    width: 100%;
+    height: 340px;
+    background: #000;
+    border-radius: 4px;
+    cursor: grab;
+  }
+  #modalCanvas.grabbing { cursor: grabbing; }
+  .modal-tools {
+    display: flex; gap: 8px; align-items: center;
+    margin-top: 10px;
+    font-size: 11px;
+    color: #aaa;
+    flex-wrap: wrap;
+  }
+  .modal-tools button {
+    background: #222;
+    border: 1px solid #444;
+    color: #ddd;
+    padding: 5px 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 11px;
+  }
+  .modal-tools button:hover { background: #333; }
+  .modal-tools .spacer { flex: 1; }
+  .modal-legend {
+    font-size: 11px;
+    color: #888;
+    margin-top: 8px;
+    line-height: 1.6;
+  }
+  .modal-legend .raw { color: #4a9eff; }
+  .modal-legend .onset { color: #5cff8a; }
+  .modal-legend .trim { color: #ff9a3c; }
+  .modal-legend .env { color: #ffd24a; }
+  .canvas-wrap.chars-wrap {
+    flex: 0 0 auto;
+  }
+  .canvas-wrap.chars-wrap canvas {
+    height: 130px;
+  }
+
+  /* 50音 pattern grid section */
+  section.pattern-section {
+    background: #fff;
+    border-top: 1px solid #e5e5e5;
+    padding: 24px 32px;
+  }
+  section.pattern-section h2 {
+    margin: 0 0 14px;
+    font-size: 13px;
+  }
+  .pattern-grid {
+    display: grid;
+    grid-template-columns: 28px repeat(5, 1fr);
+    gap: 5px 6px;
+    max-width: 980px;
+  }
+  .pg-col, .pg-row {
+    text-align: center;
+    font-size: 12px;
+    color: #888;
+    align-self: center;
+  }
+  .pg-row { text-align: right; padding-right: 4px; }
+  .pg-cell {
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 5px;
+    padding: 4px 2px 2px;
+    text-align: center;
+  }
+  .pg-cell.empty { background: transparent; border-color: transparent; }
+  .pg-cell .ch {
+    font-size: 13px;
+    font-weight: 600;
+    color: #222;
+  }
+  .pg-cell canvas {
+    width: 100%;
+    height: 32px;
+  }
+
+  .check-row {
+    display: flex; align-items: center; gap: 8px;
+    margin: 6px 0;
+    font-size: 12px;
+  }
+  .check-row input { margin: 0; }
+
+  .mfcc-bars {
+    display: flex; align-items: flex-end;
+    gap: 2px;
+    height: 60px;
+    background: #fafafa;
+    padding: 4px;
+    border-radius: 3px;
+  }
+  .mfcc-bar {
+    flex: 1;
+    background: #2563eb;
+    min-height: 1px;
+    border-radius: 1px;
+  }
+  .mfcc-bar.neg { background: #dc2626; }
+</style>
+</head>
+<body>
+<div style="position:fixed;top:8px;left:12px;z-index:200;"><a href="index.html" style="font-size:11px;color:#666;text-decoration:none;background:rgba(255,255,255,0.95);padding:4px 10px;border:1px solid #e5e5e5;border-radius:4px;font-family:-apple-system,sans-serif;">← トップ</a></div>
+
+<header>
+  <h1>声紋パターン合成</h1>
+  <p>「ルールベースの基本パターン × 録音した声のMFCC変調」のハイブリッド方式。文字ごとに録音すると、その人の声色がパターンに反映される。</p>
+</header>
+
+<div class="layout">
+
+<aside class="left">
+  <h2>名前</h2>
+  <input type="text" id="nameInput" maxlength="5" placeholder="ひらがな 1〜5文字">
+  <div class="hint">入力すると下に録音スロットが現れます</div>
+
+  <h2>録音</h2>
+  <div class="slots" id="slots"></div>
+  <div class="hint">押しっぱなしで録音。子音→母音の境界を自動検出し、それぞれのMFCCを計算します。</div>
+</aside>
+
+<main>
+  <div class="canvas-wrap stamp-wrap">
+    <h3>印鑑形（基本パターン + 変調）</h3>
+    <canvas id="stampCanvas"></canvas>
+    <div class="stamp-controls">
+      <button id="zoomInBtn" title="拡大">+</button>
+      <button id="zoomOutBtn" title="縮小">−</button>
+      <button id="zoomResetBtn" title="リセット">⊙</button>
+    </div>
+  </div>
+
+  <div class="canvas-wrap chars-wrap">
+    <h3>各文字のパターン詳細（直線表示）</h3>
+    <canvas id="charsCanvas"></canvas>
+  </div>
+</main>
+
+<aside class="right">
+  <h2>変調設定</h2>
+  <div class="check-row">
+    <input type="checkbox" id="modulationOn" checked>
+    <label for="modulationOn">MFCC変調を有効化</label>
+  </div>
+  <div class="hint">OFFにすると純粋な基本パターン（誰の声でも同じ）が見える</div>
+
+  <div class="ctrl-row">
+    <label>主要MFCC（1, 2）の影響度 <span class="val" id="alphaMainVal">0.4</span></label>
+    <input type="range" id="alphaMain" min="0" max="1" step="0.05" value="0.4">
+    <div class="hint">主要係数による大きな形の変調強度</div>
+  </div>
+
+  <div class="ctrl-row">
+    <label>細部テクスチャ（MFCC 3-12 IDCT）の影響度 <span class="val" id="alphaDetailVal">0.2</span></label>
+    <input type="range" id="alphaDetail" min="0" max="1" step="0.05" value="0.2">
+    <div class="hint">指紋的な細かいウネリの強度</div>
+  </div>
+
+  <div class="check-row">
+    <input type="checkbox" id="useConsonant" checked>
+    <label for="useConsonant">子音MFCCを使う（取れた場合）</label>
+  </div>
+
+  <h2>形状パラメータ</h2>
+  <div class="ctrl-row">
+    <label>子音セクション幅 <span class="val" id="consWidthVal">25%</span></label>
+    <input type="range" id="consWidth" min="10" max="50" value="25">
+  </div>
+  <div class="ctrl-row">
+    <label>最大変位 <span class="val" id="variationVal">0.18</span></label>
+    <input type="range" id="variation" min="0.05" max="0.40" step="0.01" value="0.18">
+  </div>
+  <div class="ctrl-row">
+    <label>線の太さ <span class="val" id="strokeVal">1.8</span></label>
+    <input type="range" id="stroke" min="0.5" max="4" step="0.1" value="1.8">
+  </div>
+
+  <h2>抽出されたMFCC</h2>
+  <div id="mfccDisplay" style="font-size:10px; color:#666;"></div>
+</aside>
+
+</div>
+
+<section class="pattern-section">
+  <h2>50音 基本パターン一覧（変調なし・ルール生成）</h2>
+  <div class="pattern-grid" id="patternGrid"></div>
+</section>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title"><b id="modalChar"></b><span id="modalInfo"></span></div>
+      <button class="modal-close" id="modalClose">閉じる</button>
+    </div>
+    <canvas id="modalCanvas"></canvas>
+    <div class="modal-tools">
+      <button id="modalPlay">▶ 再生</button>
+      <button id="modalZoomOut">−</button>
+      <button id="modalZoomIn">+</button>
+      <button id="modalZoomReset">全体表示</button>
+      <span id="modalZoomLabel">×1.0</span>
+      <button id="modalTrimReset">トリミング自動に戻す</button>
+      <span class="spacer"></span>
+      <span>オレンジ線をドラッグで使用範囲調整 / ホイール拡縮 / ダブルクリックで全体表示</span>
+    </div>
+    <div class="modal-legend">
+      <span class="raw">■ 生波形</span> &nbsp;
+      <span class="env">■ エンベロープ</span> &nbsp;
+      <span class="onset">■ 子音/母音 境界（緑線）</span> &nbsp;
+      <span class="trim">■ 使用範囲（オレンジ線）</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+const state = {
+  name: '',
+  slots: [],   // {char, buffer, recording, mfccCons, mfccVowel, hasConsonant}
+  modulationOn: true,
+  alphaMain: 0.4,
+  alphaDetail: 0.2,
+  useConsonant: true,
+  consWidth: 0.25,
+  variation: 0.18,
+  stroke: 1.8,
+  fftSize: 512,
+  numMel: 26,
+  numMfcc: 12,
+  stampZoom: 1,
+  stampOffsetX: 0,
+  stampOffsetY: 0,
+};
+
+// Modal state
+const modal = {
+  open: false,
+  slotIdx: -1,
+  zoom: 1,
+  offset: 0,
+  samples: null,
+  buffer: null,
+  envelope: null,
+  onsetIdx: -1,
+  trimStart: 0,
+  trimEnd: 0,
+  sr: 44100,
+  playSource: null,
+  playStartTime: 0,
+  playStartOffset: 0,
+  playheadIdx: -1,
+  rafId: 0,
+};
+
+let audioCtx, activeRecorder, activeChunks = [], persistentStream;
+let activeRecorderSlot = -1;
+
+// ============================================================
+// FFT
+// ============================================================
+function fft(re, im) {
+  const N = re.length;
+  for (let i = 1, j = 0; i < N; i++) {
+    let bit = N >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+  }
+  for (let len = 2; len <= N; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < N; i += len) {
+      let cRe = 1, cIm = 0;
+      for (let j = 0; j < (len >> 1); j++) {
+        const h = i + j + (len >> 1);
+        const vRe = re[h] * cRe - im[h] * cIm, vIm = re[h] * cIm + im[h] * cRe;
+        re[h] = re[i+j] - vRe; im[h] = im[i+j] - vIm;
+        re[i+j] += vRe; im[i+j] += vIm;
+        const nr = cRe * wRe - cIm * wIm; cIm = cRe * wIm + cIm * wRe; cRe = nr;
+      }
+    }
+  }
+}
+
+// ============================================================
+// Mel filterbank + MFCC
+// ============================================================
+function hzToMel(hz) { return 2595 * Math.log10(1 + hz / 700); }
+function melToHz(mel) { return 700 * (Math.pow(10, mel / 2595) - 1); }
+
+function makeMelFilterbank(numFilters, fftSize, sampleRate) {
+  const melMin = hzToMel(0), melMax = hzToMel(sampleRate / 2);
+  const pts = [];
+  for (let i = 0; i < numFilters + 2; i++) pts.push(melMin + (melMax - melMin) * i / (numFilters + 1));
+  const bins = pts.map(m => Math.floor((fftSize + 1) * melToHz(m) / sampleRate));
+  const fbank = [];
+  for (let i = 1; i <= numFilters; i++) {
+    const f = new Float32Array(fftSize / 2);
+    const lo = bins[i - 1], mid = bins[i], hi = bins[i + 1];
+    for (let k = lo; k < mid; k++) if (mid > lo) f[k] = (k - lo) / (mid - lo);
+    for (let k = mid; k < hi; k++) if (hi > mid) f[k] = (hi - k) / (hi - mid);
+    fbank.push(f);
+  }
+  return fbank;
+}
+
+function dct(input) {
+  const N = input.length;
+  const out = new Float32Array(N);
+  for (let k = 0; k < N; k++) {
+    let s = 0;
+    for (let n = 0; n < N; n++) s += input[n] * Math.cos(Math.PI * k * (n + 0.5) / N);
+    out[k] = s;
+  }
+  return out;
+}
+
+function idct(coeffs, N) {
+  const out = new Float32Array(N);
+  for (let n = 0; n < N; n++) {
+    let s = coeffs[0];
+    for (let k = 1; k < coeffs.length; k++) {
+      s += 2 * coeffs[k] * Math.cos(Math.PI * k * (n + 0.5) / N);
+    }
+    out[n] = s / N;
+  }
+  return out;
+}
+
+// Compute MFCC of a sample range (centered analysis)
+function computeMFCCMean(samples, startSample, endSample, sampleRate) {
+  if (endSample - startSample < state.fftSize) return null;
+  const fbank = makeMelFilterbank(state.numMel, state.fftSize, sampleRate);
+  const hop = Math.floor(state.fftSize / 4);
+  const re = new Float32Array(state.fftSize), im = new Float32Array(state.fftSize);
+  const acc = new Float32Array(state.numMfcc);
+  let frames = 0;
+  for (let start = startSample; start + state.fftSize <= endSample; start += hop) {
+    // DC removal + Hann window
+    let mean = 0;
+    for (let i = 0; i < state.fftSize; i++) mean += samples[start + i];
+    mean /= state.fftSize;
+    for (let i = 0; i < state.fftSize; i++) {
+      const w = 0.5 * (1 - Math.cos(2 * Math.PI * i / (state.fftSize - 1)));
+      re[i] = (samples[start + i] - mean) * w;
+      im[i] = 0;
+    }
+    fft(re, im);
+    // Power to mel
+    const mel = new Float32Array(state.numMel);
+    for (let m = 0; m < state.numMel; m++) {
+      let s = 0;
+      for (let k = 0; k < state.fftSize / 2; k++) {
+        const power = re[k] * re[k] + im[k] * im[k];
+        s += power * fbank[m][k];
+      }
+      mel[m] = Math.log(Math.max(1e-10, s));
+    }
+    // DCT
+    const c = dct(mel);
+    // Accumulate first numMfcc coefficients (skip index 0 — that's energy)
+    for (let i = 0; i < state.numMfcc; i++) acc[i] += c[i + 1];
+    frames++;
+  }
+  if (frames === 0) return null;
+  for (let i = 0; i < state.numMfcc; i++) acc[i] /= frames;
+  return acc;
+}
+
+// Vowel onset detection (simplified: from voice_seal_v2)
+function detectVowelOnset(samples, sampleRate) {
+  const frameMs = 20;
+  const frameSize = Math.floor((frameMs / 1000) * sampleRate);
+  if (frameSize <= 0 || samples.length < frameSize * 3) return null;
+  const frames = Math.floor(samples.length / frameSize);
+  const zcr = new Float32Array(frames);
+  const rms = new Float32Array(frames);
+  for (let f = 0; f < frames; f++) {
+    const start = f * frameSize;
+    let zc = 0, sumSq = 0;
+    let prev = samples[start];
+    for (let i = 1; i < frameSize; i++) {
+      const v = samples[start + i];
+      if ((prev >= 0) !== (v >= 0)) zc++;
+      sumSq += v * v;
+      prev = v;
+    }
+    zcr[f] = zc / frameSize;
+    rms[f] = Math.sqrt(sumSq / frameSize);
+  }
+  let maxRms = 0;
+  for (let i = 0; i < frames; i++) if (rms[i] > maxRms) maxRms = rms[i];
+  if (maxRms === 0) return null;
+  const rmsNorm = new Float32Array(frames);
+  for (let i = 0; i < frames; i++) rmsNorm[i] = rms[i] / maxRms;
+  const vowelMask = new Uint8Array(frames);
+  for (let i = 0; i < frames; i++) {
+    vowelMask[i] = (rmsNorm[i] > 0.4 && zcr[i] < 0.12) ? 1 : 0;
+  }
+  let onsetFrame = -1;
+  for (let i = 0; i < frames - 2; i++) {
+    if (vowelMask[i] && vowelMask[i + 1] && vowelMask[i + 2]) { onsetFrame = i; break; }
+  }
+  if (onsetFrame <= 1) return null;
+  // Sanity check: pre-onset must look like a consonant
+  let preRmsSum = 0, preZcrSum = 0;
+  for (let i = 0; i < onsetFrame; i++) { preRmsSum += rmsNorm[i]; preZcrSum += zcr[i]; }
+  const preRms = preRmsSum / onsetFrame;
+  const preZcr = preZcrSum / onsetFrame;
+  if (!(preRms < 0.15 || preZcr > 0.18)) return null;
+  return onsetFrame * frameSize;
+}
+
+// Simple RMS-based trim
+function getTrimRange(samples, sampleRate) {
+  const winMs = 15;
+  const winSize = Math.max(1, Math.floor(sampleRate * winMs / 1000));
+  const numWindows = Math.floor(samples.length / winSize);
+  if (numWindows < 3) return { start: 0, end: samples.length };
+  const rms = new Float32Array(numWindows);
+  let peak = 0;
+  for (let w = 0; w < numWindows; w++) {
+    let sumSq = 0;
+    const base = w * winSize;
+    for (let i = 0; i < winSize; i++) sumSq += samples[base + i] * samples[base + i];
+    rms[w] = Math.sqrt(sumSq / winSize);
+    if (rms[w] > peak) peak = rms[w];
+  }
+  if (peak === 0) return { start: 0, end: 0 };
+  const threshold = peak * 0.18;
+  let firstWin = 0;
+  while (firstWin < numWindows && rms[firstWin] < threshold) firstWin++;
+  let lastWin = numWindows - 1;
+  while (lastWin > firstWin && rms[lastWin] < threshold) lastWin--;
+  return { start: firstWin * winSize, end: Math.min(samples.length, (lastWin + 1) * winSize) };
+}
+
+// ============================================================
+// Per-character analysis: trim, detect boundary, compute MFCCs
+// ============================================================
+function analyzeSlot(slot) {
+  if (!slot.buffer) { slot.mfccCons = null; slot.mfccVowel = null; slot.hasConsonant = false; return; }
+  const samples = slot.buffer.getChannelData(0);
+  const sr = slot.buffer.sampleRate;
+  const trim = getTrimRange(samples, sr);
+  if (trim.end - trim.start < state.fftSize * 2) { slot.mfccCons = null; slot.mfccVowel = null; return; }
+  const trimmed = samples.slice(trim.start, trim.end);
+  const onset = detectVowelOnset(trimmed, sr);
+  if (onset !== null && onset >= state.fftSize) {
+    // Has consonant section
+    slot.hasConsonant = true;
+    slot.mfccCons = computeMFCCMean(trimmed, 0, onset, sr);
+    // Vowel section: use middle 60% to avoid edges
+    const vStart = onset + Math.floor((trimmed.length - onset) * 0.2);
+    const vEnd = trimmed.length - Math.floor((trimmed.length - onset) * 0.1);
+    slot.mfccVowel = computeMFCCMean(trimmed, vStart, vEnd, sr);
+  } else {
+    // No clear consonant; just use middle 60% as vowel
+    slot.hasConsonant = false;
+    slot.mfccCons = null;
+    const vStart = Math.floor(trimmed.length * 0.2);
+    const vEnd = Math.floor(trimmed.length * 0.8);
+    slot.mfccVowel = computeMFCCMean(trimmed, vStart, vEnd, sr);
+  }
+  slot.trim = trim;
+  slot.onsetInTrim = onset;
+}
+
+// ============================================================
+// Audio recording
+// ============================================================
+async function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
+}
+async function ensureStream() {
+  if (persistentStream && persistentStream.active) return persistentStream;
+  try {
+    persistentStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+    return persistentStream;
+  } catch (err) { alert('マイクが取得できません: ' + err.message); return null; }
+}
+async function startRec(slotIdx) {
+  if (activeRecorder) return;
+  await ensureAudio();
+  const stream = await ensureStream(); if (!stream) return;
+  activeChunks = [];
+  activeRecorder = new MediaRecorder(stream);
+  activeRecorderSlot = slotIdx;
+  activeRecorder.ondataavailable = e => activeChunks.push(e.data);
+  activeRecorder.onstop = async () => {
+    try {
+      if (!activeChunks.length) return;
+      const blob = new Blob(activeChunks, { type: activeChunks[0].type || 'audio/webm' });
+      const ab = await blob.arrayBuffer();
+      if (!ab.byteLength) return;
+      const buf = await audioCtx.decodeAudioData(ab);
+      state.slots[slotIdx].buffer = buf;
+      analyzeSlot(state.slots[slotIdx]);
+      renderSlots();
+      renderAll();
+    } catch (err) { console.error(err); }
+    finally { activeRecorder = null; activeRecorderSlot = -1; }
+  };
+  activeRecorder.start(50);
+  state.slots[slotIdx].recording = true;
+  renderSlots();
+}
+function stopRec() {
+  if (!activeRecorder) return;
+  if (activeRecorderSlot >= 0) state.slots[activeRecorderSlot].recording = false;
+  try { activeRecorder.requestData(); } catch {}
+  try { activeRecorder.stop(); } catch {}
+}
+
+// ============================================================
+// Slot UI
+// ============================================================
+function renderSlots() {
+  const el = document.getElementById('slots');
+  el.innerHTML = '';
+  state.slots.forEach((slot, i) => {
+    const div = document.createElement('div');
+    div.className = 'slot';
+    if (slot.recording) div.classList.add('recording');
+    if (slot.buffer) div.classList.add('has-data');
+    const charEl = document.createElement('div');
+    charEl.className = 'slot-char';
+    charEl.textContent = slot.char;
+    div.appendChild(charEl);
+    if (!slot.buffer) {
+      const btn = document.createElement('div');
+      btn.className = 'slot-btn';
+      btn.textContent = '押しっぱなしで録音';
+      attachRec(btn, i);
+      div.appendChild(btn);
+    } else {
+      const info = document.createElement('div');
+      info.className = 'slot-info';
+      info.style.cursor = 'pointer';
+      info.title = 'クリックで波形詳細を開く';
+      const dur = (slot.buffer.duration * 1000).toFixed(0);
+      const cons = slot.hasConsonant ? '✓' : '—';
+      info.textContent = `${dur}ms / 子音:${cons} ▾`;
+      info.addEventListener('click', () => openModal(i));
+      div.appendChild(info);
+      const rerec = document.createElement('div');
+      rerec.className = 'slot-rerec';
+      rerec.textContent = '再録音';
+      attachRec(rerec, i);
+      div.appendChild(rerec);
+      const clear = document.createElement('button');
+      clear.className = 'slot-clear';
+      clear.textContent = '×';
+      clear.addEventListener('click', () => {
+        slot.buffer = null; slot.mfccCons = null; slot.mfccVowel = null;
+        renderSlots(); renderAll();
+      });
+      div.appendChild(clear);
+    }
+    el.appendChild(div);
+  });
+}
+
+function attachRec(el, slotIdx) {
+  el.addEventListener('mousedown', e => { e.preventDefault(); startRec(slotIdx); });
+  el.addEventListener('mouseup', e => { e.preventDefault(); stopRec(); });
+  el.addEventListener('mouseleave', () => { if (state.slots[slotIdx]?.recording) stopRec(); });
+  el.addEventListener('touchstart', e => { e.preventDefault(); startRec(slotIdx); }, { passive: false });
+  el.addEventListener('touchend', e => { e.preventDefault(); stopRec(); });
+}
+
+// Name input
+document.getElementById('nameInput').addEventListener('input', e => {
+  const v = e.target.value.trim().slice(0, 5);
+  state.name = v;
+  const newSlots = [];
+  for (let i = 0; i < v.length; i++) {
+    const existing = state.slots[i];
+    newSlots.push(existing && existing.char === v[i] ? existing : {
+      char: v[i], buffer: null, recording: false, mfccCons: null, mfccVowel: null, hasConsonant: false,
+    });
+  }
+  state.slots = newSlots;
+  renderSlots();
+  renderAll();
+});
+
+// ============================================================
+// Pattern generation (from pattern_generator's logic)
+// ============================================================
+const CONSONANTS = {
+  '':  { kind: 'none', points: 0, height: 0, sharp: 0 },
+  'k': { kind: 'spike', points: 1, height: 0.9, sharp: 1.0 },
+  's': { kind: 'noise', points: 5, height: 0.75, sharp: 0.2 },
+  't': { kind: 'spike', points: 1, height: 0.65, sharp: 0.85 },
+  'n': { kind: 'soft', points: 1, height: -0.35, sharp: 0.15 },
+  'h': { kind: 'noise', points: 3, height: 0.4, sharp: 0.15 },
+  'm': { kind: 'soft', points: 1, height: -0.4, sharp: 0.15 },
+  'y': { kind: 'glide', points: 1, height: 0.25, sharp: 0 },
+  'r': { kind: 'tap', points: 1, height: 0.3, sharp: 0.5 },
+  'w': { kind: 'glide', points: 1, height: 0.2, sharp: 0 },
+};
+const VOWELS = {
+  'a': { amp: 1.00, peakX: 0.50, kind: 'round' },
+  'i': { amp: 0.95, peakX: 0.45, kind: 'sharp' },
+  'u': { amp: 0.40, peakX: 0.50, kind: 'small' },
+  'e': { amp: 0.65, peakX: 0.60, kind: 'lean' },
+  'o': { amp: 0.70, peakX: 0.45, kind: 'round' },
+};
+
+// Map kana char → { c, v }
+const KANA_MAP = (() => {
+  const m = {};
+  const rows = {
+    '': ['あ','い','う','え','お'],
+    'k': ['か','き','く','け','こ'],
+    's': ['さ','し','す','せ','そ'],
+    't': ['た','ち','つ','て','と'],
+    'n': ['な','に','ぬ','ね','の'],
+    'h': ['は','ひ','ふ','へ','ほ'],
+    'm': ['ま','み','む','め','も'],
+    'y': ['や',null,'ゆ',null,'よ'],
+    'r': ['ら','り','る','れ','ろ'],
+    'w': ['わ',null,null,null,'を'],
+  };
+  const dakuon = {
+    'k': ['が','ぎ','ぐ','げ','ご'],
+    's': ['ざ','じ','ず','ぜ','ぞ'],
+    't': ['だ','ぢ','づ','で','ど'],
+    'h': ['ば','び','ぶ','べ','ぼ'],
+  };
+  const vowels = ['a','i','u','e','o'];
+  for (const [c, chars] of Object.entries(rows)) {
+    chars.forEach((ch, i) => { if (ch) m[ch] = { c, v: vowels[i], voiced: false }; });
+  }
+  for (const [c, chars] of Object.entries(dakuon)) {
+    chars.forEach((ch, i) => { if (ch) m[ch] = { c, v: vowels[i], voiced: true }; });
+  }
+  ['ぱ','ぴ','ぷ','ぺ','ぽ'].forEach((ch, i) => { m[ch] = { c: 'h', v: vowels[i], halfVoiced: true }; });
+  return m;
+})();
+
+function genConsonantPoints(cKey, consW) {
+  const c = CONSONANTS[cKey];
+  if (!c || c.kind === 'none') return [];
+  const w = consW;
+  const h = c.height;
+  if (c.kind === 'spike') return [{ x: w * 0.15, y: h, sharp: c.sharp }];
+  if (c.kind === 'noise') {
+    const pts = [];
+    for (let i = 0; i < c.points; i++) {
+      const t = (i + 0.5) / c.points;
+      const xJ = Math.sin(i * 13.7) * 0.5;
+      const yJ = Math.sin(i * 7.3 + 1.2);
+      pts.push({ x: w * (t + xJ * 0.06), y: h * (0.6 + 0.4 * yJ), sharp: c.sharp });
+    }
+    return pts;
+  }
+  if (c.kind === 'soft') return [{ x: w * 0.5, y: h, sharp: c.sharp }];
+  if (c.kind === 'glide') return [{ x: w * 0.9, y: h, sharp: 0 }];
+  if (c.kind === 'tap') return [{ x: w * 0.5, y: h, sharp: c.sharp }];
+  return [];
+}
+
+function genVowelPoints(vKey, consW) {
+  const v = VOWELS[vKey];
+  const x0 = consW;
+  const xW = 1 - x0;
+  const amp = v.amp;
+  const peakX = x0 + xW * v.peakX;
+  if (v.kind === 'sharp') return [
+    { x: x0 + xW * 0.2, y: amp * 0.4, sharp: 0.6 },
+    { x: peakX, y: amp, sharp: 0.8 },
+    { x: x0 + xW * 0.75, y: amp * 0.3, sharp: 0.4 },
+  ];
+  if (v.kind === 'small') return [{ x: peakX, y: amp, sharp: 0.2 }];
+  if (v.kind === 'lean') return [
+    { x: x0 + xW * 0.3, y: amp * 0.3, sharp: 0.2 },
+    { x: peakX, y: amp, sharp: 0.3 },
+  ];
+  return [{ x: peakX, y: amp, sharp: 0.2 }];
+}
+
+function buildPathSamples(points, samples) {
+  const ys = new Float32Array(samples);
+  for (let s = 0; s < samples; s++) {
+    const x = s / (samples - 1);
+    let y = 0;
+    for (const p of points) {
+      const sigma = 0.18 - p.sharp * 0.155;
+      const d = (x - p.x) / sigma;
+      y += p.y * Math.exp(-d * d);
+    }
+    ys[s] = y;
+  }
+  return ys;
+}
+
+// ============================================================
+// MFCC modulation
+// ============================================================
+// Typical MFCC magnitudes (rough normalizers — refine empirically)
+const MFCC_NORM = [60, 40, 30, 25, 20, 18, 16, 14, 12, 10, 9, 8];
+
+// Generate per-character pattern samples, with MFCC modulation applied
+function generateModulatedPattern(slot, kanaInfo, sampleCount = 200) {
+  const consW = state.consWidth;
+  const cPts = genConsonantPoints(kanaInfo.c, consW);
+  const vPts = genVowelPoints(kanaInfo.v, consW);
+  const baseYs = buildPathSamples([...cPts, ...vPts], sampleCount);
+  if (!state.modulationOn || !slot || !slot.mfccVowel) return baseYs;
+
+  const aMain = state.alphaMain;
+  const aDetail = state.alphaDetail;
+  const mfccV = slot.mfccVowel;
+  const mfccC = (state.useConsonant && slot.hasConsonant) ? slot.mfccCons : null;
+
+  // Normalized MFCC[1] for vowel (used for overall vowel section scale)
+  const vMfcc1Norm = mfccV[0] / MFCC_NORM[0]; // typically ±1
+  const vMfcc2Norm = mfccV[1] / MFCC_NORM[1];
+  const cMfcc1Norm = mfccC ? mfccC[0] / MFCC_NORM[0] : 0;
+  const cMfcc2Norm = mfccC ? mfccC[1] / MFCC_NORM[1] : 0;
+
+  // Detail texture: IDCT of MFCC[3..12]
+  const detailCoefs = new Float32Array(state.numMfcc - 2);
+  for (let i = 0; i < detailCoefs.length; i++) {
+    const idx = i + 2; // skip first 2
+    detailCoefs[i] = (mfccV[idx] || 0) / (MFCC_NORM[idx] || 10);
+  }
+  // Reconstruct as small ripple, length matching sampleCount in the vowel section
+  const detailReconstruction = idct(detailCoefs, sampleCount);
+
+  const out = new Float32Array(sampleCount);
+  for (let s = 0; s < sampleCount; s++) {
+    const x = s / (sampleCount - 1);
+    const inCons = x < consW;
+    let baseY = baseYs[s];
+
+    if (inCons && mfccC) {
+      // Modulate consonant section
+      // MFCC[1] scales magnitude (clamp 0.5..1.5)
+      const scale = 1 + aMain * 0.5 * cMfcc1Norm;
+      // MFCC[2] adds asymmetry: stretch peak position
+      baseY = baseY * scale;
+      // Detail texture (within consonant only)
+      const detailIdx = Math.floor((x / consW) * sampleCount);
+      const detail = detailReconstruction[Math.min(sampleCount - 1, detailIdx)] || 0;
+      baseY += aDetail * detail * 0.5;
+    } else {
+      // Vowel section
+      const scale = 1 + aMain * 0.5 * vMfcc1Norm;
+      baseY = baseY * scale;
+      // MFCC[2] adds lean (tilt over the vowel section)
+      const tilt = aMain * 0.3 * vMfcc2Norm * (x - consW - (1 - consW) / 2) / ((1 - consW) / 2);
+      baseY += tilt * 0.2;
+      // Detail texture
+      const tInVowel = (x - consW) / (1 - consW);
+      const detailIdx = Math.floor(tInVowel * sampleCount);
+      const detail = detailReconstruction[Math.min(sampleCount - 1, detailIdx)] || 0;
+      baseY += aDetail * detail;
+    }
+    out[s] = baseY;
+  }
+  return out;
+}
+
+// ============================================================
+// Render: stamp (circle) + chars (linear preview)
+// ============================================================
+function setupCanvas(id) {
+  const c = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  const rect = c.getBoundingClientRect();
+  c.width = rect.width * dpr;
+  c.height = rect.height * dpr;
+  const ctx = c.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, rect.width, rect.height);
+  return { ctx, W: rect.width, H: rect.height };
+}
+
+function renderStamp() {
+  const { ctx, W, H } = setupCanvas('stampCanvas');
+  const z = state.stampZoom;
+  const cx = W / 2 + state.stampOffsetX;
+  const cy = H / 2 + state.stampOffsetY;
+  const baseR = Math.min(W, H) * 0.32 * z;
+  const variation = Math.min(W, H) * state.variation * z;
+  const N = Math.max(1, state.slots.length);
+
+  // Base reference circle
+  ctx.strokeStyle = '#eee';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, baseR, 0, Math.PI * 2); ctx.stroke();
+
+  // Sector divider lines (character boundaries)
+  ctx.strokeStyle = '#d0d0d0';
+  ctx.lineWidth = 1.2;
+  for (let s = 0; s < N; s++) {
+    const angle = -Math.PI / 2 + (s / N) * Math.PI * 2;
+    const rIn = baseR * 0.3;
+    const rOut = baseR + variation * 1.4;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(angle) * rIn, cy + Math.sin(angle) * rIn);
+    ctx.lineTo(cx + Math.cos(angle) * rOut, cy + Math.sin(angle) * rOut);
+    ctx.stroke();
+  }
+
+  // Consonant/vowel sub-dividers within each sector (orange dashed, more visible)
+  ctx.strokeStyle = '#f59e0b';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  for (let s = 0; s < N; s++) {
+    const secStart = -Math.PI / 2 + (s / N) * Math.PI * 2;
+    const secSpan = (1 / N) * Math.PI * 2;
+    const angle = secStart + state.consWidth * secSpan;
+    const rIn = baseR * 0.55;
+    const rOut = baseR + variation * 1.2;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(angle) * rIn, cy + Math.sin(angle) * rIn);
+    ctx.lineTo(cx + Math.cos(angle) * rOut, cy + Math.sin(angle) * rOut);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  if (state.slots.length === 0) {
+    ctx.fillStyle = '#bbb'; ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('名前を入力してください', cx, cy);
+    return;
+  }
+
+  const sampleCount = 200;
+  // Collect each character's pattern samples
+  const allYs = [];
+  for (let s = 0; s < N; s++) {
+    const slot = state.slots[s];
+    const info = KANA_MAP[slot.char] || { c: '', v: 'a' };
+    allYs.push(generateModulatedPattern(slot, info, sampleCount));
+  }
+
+  // Draw stamp path
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = state.stroke;
+  ctx.beginPath();
+  let started = false;
+  for (let s = 0; s < N; s++) {
+    const secStart = -Math.PI / 2 + (s / N) * Math.PI * 2;
+    const secSpan = (1 / N) * Math.PI * 2;
+    const ys = allYs[s];
+    for (let i = 0; i < ys.length; i++) {
+      const t = i / (ys.length - 1);
+      const angle = secStart + t * secSpan;
+      const r = baseR + ys[i] * variation;
+      const x = cx + Math.cos(angle) * r;
+      const y = cy + Math.sin(angle) * r;
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    }
+  }
+  if (started) { ctx.closePath(); ctx.stroke(); }
+
+  // Sector labels
+  ctx.fillStyle = '#888'; ctx.font = 'bold 14px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let s = 0; s < N; s++) {
+    const a = -Math.PI / 2 + ((s + 0.5) / N) * Math.PI * 2;
+    ctx.fillText(state.slots[s].char, cx + Math.cos(a) * baseR * 1.55, cy + Math.sin(a) * baseR * 1.55);
+  }
+}
+
+function renderChars() {
+  const { ctx, W, H } = setupCanvas('charsCanvas');
+  if (state.slots.length === 0) return;
+  const padL = 8, padR = 8, padT = 30, padB = 22;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const N = state.slots.length;
+  const cellW = plotW / N;
+  for (let s = 0; s < N; s++) {
+    const x0 = padL + s * cellW;
+    const slot = state.slots[s];
+    const info = KANA_MAP[slot.char] || { c: '', v: 'a' };
+    const ys = generateModulatedPattern(slot, info, 200);
+    const baseY = padT + plotH * 0.7;
+    const ampScale = plotH * 0.55;
+    // Cell background
+    if (s % 2 === 0) {
+      ctx.fillStyle = '#f9f9f9';
+      ctx.fillRect(x0, padT, cellW, plotH);
+    }
+    // Strong character boundary line (solid, prominent)
+    if (s > 0) {
+      ctx.strokeStyle = '#bbb'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(x0, padT); ctx.lineTo(x0, padT + plotH); ctx.stroke();
+    }
+    // Consonant/vowel sub-divider (orange dashed, more visible)
+    const consX = x0 + state.consWidth * cellW;
+    ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(consX, padT); ctx.lineTo(consX, padT + plotH); ctx.stroke();
+    ctx.setLineDash([]);
+    // Path
+    ctx.strokeStyle = state.modulationOn && slot.mfccVowel ? '#2563eb' : '#666';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let i = 0; i < ys.length; i++) {
+      const x = x0 + (i / (ys.length - 1)) * cellW;
+      const y = baseY - ys[i] * ampScale;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    // Char label
+    ctx.fillStyle = '#222'; ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(slot.char, x0 + cellW / 2, 6);
+    // Status
+    ctx.font = '10px sans-serif'; ctx.fillStyle = '#888';
+    const status = slot.buffer
+      ? (slot.mfccVowel ? (slot.hasConsonant ? 'C+V' : 'V only') : '解析中')
+      : '未録音';
+    ctx.fillText(status, x0 + cellW / 2, padT + plotH + 4);
+  }
+}
+
+function renderMfccDisplay() {
+  const el = document.getElementById('mfccDisplay');
+  if (state.slots.length === 0) { el.innerHTML = '<div style="color:#bbb;">録音すると表示されます</div>'; return; }
+  let html = '';
+  state.slots.forEach((slot, i) => {
+    if (!slot.mfccVowel) {
+      html += `<div style="margin:8px 0;"><b>${slot.char}</b>: 未録音 or 解析失敗</div>`;
+      return;
+    }
+    html += `<div style="margin:10px 0;"><b>${slot.char}</b> ${slot.hasConsonant ? '(子音+母音)' : '(母音のみ)'}</div>`;
+    if (slot.mfccCons) {
+      html += `<div style="margin-left:8px; font-size:9px; color:#888;">子音MFCC</div>`;
+      html += renderMfccBars(slot.mfccCons);
+    }
+    html += `<div style="margin-left:8px; font-size:9px; color:#888;">母音MFCC</div>`;
+    html += renderMfccBars(slot.mfccVowel);
+  });
+  el.innerHTML = html;
+}
+function renderMfccBars(mfcc) {
+  let maxAbs = 0;
+  for (const v of mfcc) if (Math.abs(v) > maxAbs) maxAbs = Math.abs(v);
+  if (maxAbs === 0) maxAbs = 1;
+  let html = '<div class="mfcc-bars">';
+  for (let i = 0; i < mfcc.length; i++) {
+    const h = Math.abs(mfcc[i]) / maxAbs * 100;
+    const cls = mfcc[i] < 0 ? 'mfcc-bar neg' : 'mfcc-bar';
+    html += `<div class="${cls}" style="height:${h}%;" title="MFCC[${i+1}] = ${mfcc[i].toFixed(2)}"></div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderAll() {
+  renderStamp();
+  renderChars();
+  renderMfccDisplay();
+  renderPatternGrid();
+}
+
+// ============================================================
+// 50音 pattern grid (base patterns only, no MFCC)
+// ============================================================
+const GRID_ROWS = [
+  { c: '', chars: ['あ','い','う','え','お'] },
+  { c: 'k', chars: ['か','き','く','け','こ'] },
+  { c: 's', chars: ['さ','し','す','せ','そ'] },
+  { c: 't', chars: ['た','ち','つ','て','と'] },
+  { c: 'n', chars: ['な','に','ぬ','ね','の'] },
+  { c: 'h', chars: ['は','ひ','ふ','へ','ほ'] },
+  { c: 'm', chars: ['ま','み','む','め','も'] },
+  { c: 'y', chars: ['や',null,'ゆ',null,'よ'] },
+  { c: 'r', chars: ['ら','り','る','れ','ろ'] },
+  { c: 'w', chars: ['わ',null,null,null,'を'] },
+];
+
+function buildPatternGrid() {
+  const el = document.getElementById('patternGrid');
+  el.innerHTML = '';
+  // header row
+  const emptyHead = document.createElement('div');
+  emptyHead.className = 'pg-col';
+  el.appendChild(emptyHead);
+  for (const v of ['あ', 'い', 'う', 'え', 'お']) {
+    const d = document.createElement('div');
+    d.className = 'pg-col';
+    d.textContent = v;
+    el.appendChild(d);
+  }
+  // rows
+  for (const row of GRID_ROWS) {
+    const lbl = document.createElement('div');
+    lbl.className = 'pg-row';
+    lbl.textContent = row.c || 'あ';
+    el.appendChild(lbl);
+    for (let i = 0; i < 5; i++) {
+      const ch = row.chars[i];
+      if (!ch) {
+        const e = document.createElement('div'); e.className = 'pg-cell empty'; el.appendChild(e); continue;
+      }
+      const cell = document.createElement('div');
+      cell.className = 'pg-cell';
+      const chEl = document.createElement('div'); chEl.className = 'ch'; chEl.textContent = ch;
+      const cv = document.createElement('canvas');
+      cell.appendChild(chEl);
+      cell.appendChild(cv);
+      cell.dataset.ch = ch;
+      el.appendChild(cell);
+    }
+  }
+}
+
+function renderPatternGrid() {
+  document.querySelectorAll('.pg-cell').forEach(cell => {
+    if (cell.classList.contains('empty')) return;
+    const cv = cell.querySelector('canvas');
+    if (!cv) return;
+    drawBasePattern(cv, cell.dataset.ch);
+  });
+}
+
+function drawBasePattern(canvas, ch) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0) return;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = rect.width, H = rect.height;
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+  const info = KANA_MAP[ch] || { c: '', v: 'a' };
+  const cPts = genConsonantPoints(info.c, state.consWidth);
+  const vPts = genVowelPoints(info.v, state.consWidth);
+  const ys = buildPathSamples([...cPts, ...vPts], 100);
+  const baseY = H * 0.75;
+  const ampScale = H * 0.55;
+  // consonant divider (orange dashed)
+  const consX = state.consWidth * W;
+  ctx.strokeStyle = '#f59e0b';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 2]);
+  ctx.beginPath(); ctx.moveTo(consX, 0); ctx.lineTo(consX, H); ctx.stroke();
+  ctx.setLineDash([]);
+  // path
+  ctx.strokeStyle = '#222'; ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  for (let i = 0; i < ys.length; i++) {
+    const x = (i / (ys.length - 1)) * W;
+    const y = baseY - ys[i] * ampScale;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+// ============================================================
+// Wiring
+// ============================================================
+document.getElementById('modulationOn').addEventListener('change', e => { state.modulationOn = e.target.checked; renderAll(); });
+document.getElementById('useConsonant').addEventListener('change', e => { state.useConsonant = e.target.checked; renderAll(); });
+function bindSlider(id, key, scale, fmt, valId) {
+  const sl = document.getElementById(id);
+  const vEl = document.getElementById(valId);
+  sl.addEventListener('input', () => {
+    const raw = parseFloat(sl.value);
+    state[key] = scale ? raw * scale : raw;
+    vEl.textContent = (typeof fmt === 'function') ? fmt(raw) : raw.toFixed(2) + (fmt || '');
+    renderAll();
+  });
+}
+bindSlider('alphaMain', 'alphaMain', 1, '', 'alphaMainVal');
+bindSlider('alphaDetail', 'alphaDetail', 1, '', 'alphaDetailVal');
+bindSlider('consWidth', 'consWidth', 0.01, raw => Math.round(raw) + '%', 'consWidthVal');
+bindSlider('variation', 'variation', 1, '', 'variationVal');
+bindSlider('stroke', 'stroke', 1, '', 'strokeVal');
+
+// ============================================================
+// Stamp zoom controls
+// ============================================================
+const stampCanvas = document.getElementById('stampCanvas');
+document.getElementById('zoomInBtn').addEventListener('click', () => {
+  state.stampZoom = Math.min(8, state.stampZoom * 1.4); renderStamp();
+});
+document.getElementById('zoomOutBtn').addEventListener('click', () => {
+  state.stampZoom = Math.max(0.4, state.stampZoom / 1.4); renderStamp();
+});
+document.getElementById('zoomResetBtn').addEventListener('click', () => {
+  state.stampZoom = 1; state.stampOffsetX = 0; state.stampOffsetY = 0; renderStamp();
+});
+stampCanvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect = stampCanvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const W = rect.width, H = rect.height;
+  const cxBefore = W / 2 + state.stampOffsetX;
+  const cyBefore = H / 2 + state.stampOffsetY;
+  const factor = Math.exp(-e.deltaY * 0.002);
+  const newZoom = Math.min(8, Math.max(0.4, state.stampZoom * factor));
+  const ratio = newZoom / state.stampZoom;
+  state.stampOffsetX = mx - (mx - cxBefore) * ratio - W / 2;
+  state.stampOffsetY = my - (my - cyBefore) * ratio - H / 2;
+  state.stampZoom = newZoom;
+  renderStamp();
+}, { passive: false });
+let stampDrag = null;
+stampCanvas.addEventListener('mousedown', e => {
+  stampDrag = { x: e.clientX, y: e.clientY, ox: state.stampOffsetX, oy: state.stampOffsetY };
+  stampCanvas.classList.add('grabbing');
+});
+window.addEventListener('mousemove', e => {
+  if (!stampDrag) return;
+  state.stampOffsetX = stampDrag.ox + (e.clientX - stampDrag.x);
+  state.stampOffsetY = stampDrag.oy + (e.clientY - stampDrag.y);
+  renderStamp();
+});
+window.addEventListener('mouseup', () => {
+  if (stampDrag) { stampDrag = null; stampCanvas.classList.remove('grabbing'); }
+});
+
+// ============================================================
+// Modal (waveform detail viewer)
+// ============================================================
+function computeEnvelope(samples, sr, windowMs = 20) {
+  const win = Math.max(1, Math.floor((windowMs / 1000) * sr));
+  const half = Math.floor(win / 2);
+  const cumSq = new Float64Array(samples.length + 1);
+  for (let i = 0; i < samples.length; i++) cumSq[i + 1] = cumSq[i] + samples[i] * samples[i];
+  const out = new Float32Array(samples.length);
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(0, i - half);
+    const e = Math.min(samples.length, i + half + 1);
+    out[i] = Math.sqrt((cumSq[e] - cumSq[s]) / (e - s));
+  }
+  return out;
+}
+
+function openModal(slotIdx) {
+  const slot = state.slots[slotIdx];
+  if (!slot || !slot.buffer) return;
+  modal.open = true;
+  modal.slotIdx = slotIdx;
+  modal.buffer = slot.buffer;
+  modal.samples = slot.buffer.getChannelData(0);
+  modal.sr = slot.buffer.sampleRate;
+  modal.envelope = computeEnvelope(modal.samples, modal.sr);
+  modal.zoom = 1;
+  modal.offset = 0;
+  modal.playheadIdx = -1;
+  // Use slot's trim and onset
+  modal.trimStart = slot.trim ? slot.trim.start : 0;
+  modal.trimEnd = slot.trim ? slot.trim.end : modal.samples.length;
+  modal.onsetIdx = slot.onsetInTrim !== undefined && slot.onsetInTrim !== null
+    ? modal.trimStart + slot.onsetInTrim : -1;
+  // Update header
+  document.getElementById('modalChar').textContent = slot.char;
+  updateModalInfo();
+  document.getElementById('modalBg').classList.add('show');
+  requestAnimationFrame(renderModal);
+}
+function closeModal() {
+  modal.open = false;
+  modal.slotIdx = -1;
+  stopPlay();
+  document.getElementById('modalBg').classList.remove('show');
+}
+function updateModalInfo() {
+  const dur = (modal.samples.length / modal.sr * 1000).toFixed(0);
+  const usedMs = ((modal.trimEnd - modal.trimStart) / modal.sr * 1000).toFixed(0);
+  const startMs = (modal.trimStart / modal.sr * 1000).toFixed(0);
+  const endMs = (modal.trimEnd / modal.sr * 1000).toFixed(0);
+  const parts = [`録音長 ${dur}ms`, `使用範囲 ${startMs}–${endMs}ms (${usedMs}ms)`];
+  if (modal.onsetIdx >= 0) {
+    parts.push(`境界 ≈ ${(modal.onsetIdx / modal.sr * 1000).toFixed(0)}ms`);
+  } else {
+    parts.push(`境界検出なし`);
+  }
+  document.getElementById('modalInfo').textContent = ' / ' + parts.join(' / ');
+}
+
+function renderModal() {
+  if (!modal.open || !modal.samples) return;
+  const canvas = document.getElementById('modalCanvas');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = rect.width, H = rect.height;
+  // bg
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  // center line
+  ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, H/2); ctx.lineTo(W, H/2); ctx.stroke();
+
+  const N = modal.samples.length;
+  const visN = N / modal.zoom;
+  const startN = modal.offset * N;
+  const spp = visN / W;
+
+  // raw waveform
+  ctx.strokeStyle = '#4a9eff'; ctx.lineWidth = 1;
+  if (spp >= 1) {
+    ctx.beginPath();
+    for (let x = 0; x < W; x++) {
+      const s = Math.floor(startN + x * spp), e = Math.floor(startN + (x+1) * spp);
+      let min = 1, max = -1;
+      for (let i = Math.max(0, s); i < Math.min(N, e); i++) {
+        if (modal.samples[i] < min) min = modal.samples[i];
+        if (modal.samples[i] > max) max = modal.samples[i];
+      }
+      ctx.moveTo(x, H/2 - max * H/2 * 0.92);
+      ctx.lineTo(x, H/2 - min * H/2 * 0.92);
+    }
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    let started = false;
+    for (let x = 0; x < W; x++) {
+      const sIdx = startN + x * spp;
+      const lo = Math.floor(sIdx);
+      if (lo < 0 || lo >= N - 1) continue;
+      const hi = lo + 1;
+      const frac = sIdx - lo;
+      const v = modal.samples[lo] * (1 - frac) + modal.samples[hi] * frac;
+      const y = H/2 - v * H/2 * 0.92;
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // envelope (mirrored, yellow)
+  ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = 1.3;
+  for (const sign of [-1, 1]) {
+    ctx.beginPath(); let started = false;
+    for (let x = 0; x < W; x++) {
+      const s = Math.floor(startN + x * spp), e = Math.floor(startN + (x+1) * spp);
+      let m = 0;
+      if (spp >= 1) {
+        for (let i = Math.max(0, s); i < Math.min(N, e); i++) if (modal.envelope[i] > m) m = modal.envelope[i];
+      } else {
+        const idx = Math.floor(startN + x * spp);
+        if (idx >= 0 && idx < N) m = modal.envelope[idx];
+      }
+      const y = H/2 + sign * m * H/2 * 0.92;
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // trim overlay
+  const trimX1 = (modal.trimStart - startN) / visN * W;
+  const trimX2 = (modal.trimEnd - startN) / visN * W;
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  if (trimX1 > 0) ctx.fillRect(0, 0, Math.min(W, trimX1), H);
+  if (trimX2 < W) ctx.fillRect(Math.max(0, trimX2), 0, W - Math.max(0, trimX2), H);
+  ctx.strokeStyle = '#ff9a3c'; ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 3]);
+  if (trimX1 >= 0 && trimX1 <= W) { ctx.beginPath(); ctx.moveTo(trimX1, 0); ctx.lineTo(trimX1, H); ctx.stroke(); }
+  if (trimX2 >= 0 && trimX2 <= W) { ctx.beginPath(); ctx.moveTo(trimX2, 0); ctx.lineTo(trimX2, H); ctx.stroke(); }
+  ctx.setLineDash([]);
+
+  // onset (vowel boundary) marker
+  if (modal.onsetIdx >= 0) {
+    const onX = (modal.onsetIdx - startN) / visN * W;
+    if (onX >= 0 && onX <= W) {
+      ctx.strokeStyle = '#5cff8a'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(onX, 0); ctx.lineTo(onX, H); ctx.stroke();
+      ctx.fillStyle = '#5cff8a'; ctx.font = '12px sans-serif';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillText('母音 →', onX + 6, 6);
+      ctx.textAlign = 'right'; ctx.fillStyle = '#888';
+      ctx.fillText('← 子音', onX - 6, 6);
+    }
+  }
+
+  // playhead
+  if (modal.playheadIdx >= 0) {
+    const phX = (modal.playheadIdx - startN) / visN * W;
+    if (phX >= 0 && phX <= W) {
+      ctx.strokeStyle = '#ff5c5c'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(phX, 0); ctx.lineTo(phX, H); ctx.stroke();
+    }
+  }
+
+  // scrollbar
+  ctx.fillStyle = '#222'; ctx.fillRect(0, H - 4, W, 4);
+  ctx.fillStyle = '#666'; ctx.fillRect(modal.offset * W, H - 4, W / modal.zoom, 4);
+
+  document.getElementById('modalZoomLabel').textContent = '×' + modal.zoom.toFixed(modal.zoom < 10 ? 1 : 0);
+}
+
+// Modal interaction
+document.getElementById('modalClose').addEventListener('click', closeModal);
+document.getElementById('modalBg').addEventListener('click', e => { if (e.target.id === 'modalBg') closeModal(); });
+const modalCanvas = document.getElementById('modalCanvas');
+
+modalCanvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect = modalCanvas.getBoundingClientRect();
+  const mouseX = (e.clientX - rect.left) / rect.width;
+  const sampleFracBefore = modal.offset + mouseX / modal.zoom;
+  const factor = Math.exp(-e.deltaY * 0.002);
+  modal.zoom = Math.max(1, Math.min(200, modal.zoom * factor));
+  modal.offset = sampleFracBefore - mouseX / modal.zoom;
+  modal.offset = Math.max(0, Math.min(1 - 1/modal.zoom, modal.offset));
+  renderModal();
+}, { passive: false });
+
+modalCanvas.addEventListener('dblclick', () => {
+  modal.zoom = 1; modal.offset = 0; renderModal();
+});
+
+let modalDrag = null;
+const TRIM_HIT = 8;
+function sampleToX(sIdx) {
+  const rect = modalCanvas.getBoundingClientRect();
+  return ((sIdx - modal.offset * modal.samples.length) / (modal.samples.length / modal.zoom)) * rect.width;
+}
+function xToSample(x) {
+  const rect = modalCanvas.getBoundingClientRect();
+  return Math.round(modal.offset * modal.samples.length + (x / rect.width) * (modal.samples.length / modal.zoom));
+}
+modalCanvas.addEventListener('mousedown', e => {
+  if (!modal.samples) return;
+  const rect = modalCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const xS = sampleToX(modal.trimStart);
+  const xE = sampleToX(modal.trimEnd);
+  let trim = null;
+  if (Math.abs(x - xS) <= TRIM_HIT) trim = 'start';
+  else if (Math.abs(x - xE) <= TRIM_HIT) trim = 'end';
+  modalDrag = { startX: e.clientX, startOffset: modal.offset, width: rect.width, moved: false, trim };
+  if (trim) modalCanvas.style.cursor = 'ew-resize';
+});
+window.addEventListener('mousemove', e => {
+  if (!modalDrag) {
+    if (modal.open && modal.samples) {
+      const rect = modalCanvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      if (x >= 0 && x <= rect.width && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        const xS = sampleToX(modal.trimStart), xE = sampleToX(modal.trimEnd);
+        const near = Math.abs(x - xS) <= TRIM_HIT || Math.abs(x - xE) <= TRIM_HIT;
+        modalCanvas.style.cursor = near ? 'ew-resize' : '';
+      }
+    }
+    return;
+  }
+  const dx = e.clientX - modalDrag.startX;
+  if (modalDrag.trim) {
+    const rect = modalCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const sIdx = xToSample(x);
+    const N = modal.samples.length;
+    if (modalDrag.trim === 'start') modal.trimStart = Math.max(0, Math.min(modal.trimEnd - 1, sIdx));
+    else modal.trimEnd = Math.max(modal.trimStart + 1, Math.min(N, sIdx));
+    modalDrag.moved = true;
+    renderModal();
+    return;
+  }
+  if (!modalDrag.moved && Math.abs(dx) > 4) {
+    modalDrag.moved = true; modalCanvas.classList.add('grabbing');
+  }
+  if (modalDrag.moved) {
+    modal.offset = modalDrag.startOffset - (dx / modalDrag.width) / modal.zoom;
+    modal.offset = Math.max(0, Math.min(1 - 1/modal.zoom, modal.offset));
+    renderModal();
+  }
+});
+window.addEventListener('mouseup', () => {
+  if (!modalDrag) return;
+  if (modalDrag.trim && modalDrag.moved) {
+    // Commit trim to slot, recompute MFCC
+    const slot = state.slots[modal.slotIdx];
+    if (slot) {
+      slot.trim = { start: modal.trimStart, end: modal.trimEnd };
+      // re-analyze with new trim
+      reanalyzeSlotWithTrim(slot);
+      updateModalInfo();
+      renderSlots();
+      renderAll();
+    }
+  }
+  modalCanvas.classList.remove('grabbing');
+  modalCanvas.style.cursor = '';
+  modalDrag = null;
+});
+
+// Re-analyze slot using a fixed trim (called after manual trim adjust)
+function reanalyzeSlotWithTrim(slot) {
+  if (!slot || !slot.buffer || !slot.trim) return;
+  const samples = slot.buffer.getChannelData(0);
+  const sr = slot.buffer.sampleRate;
+  const trim = slot.trim;
+  if (trim.end - trim.start < state.fftSize * 2) { slot.mfccCons = null; slot.mfccVowel = null; return; }
+  const trimmed = samples.slice(trim.start, trim.end);
+  const onset = detectVowelOnset(trimmed, sr);
+  if (onset !== null && onset >= state.fftSize) {
+    slot.hasConsonant = true;
+    slot.mfccCons = computeMFCCMean(trimmed, 0, onset, sr);
+    const vStart = onset + Math.floor((trimmed.length - onset) * 0.2);
+    const vEnd = trimmed.length - Math.floor((trimmed.length - onset) * 0.1);
+    slot.mfccVowel = computeMFCCMean(trimmed, vStart, vEnd, sr);
+  } else {
+    slot.hasConsonant = false;
+    slot.mfccCons = null;
+    const vStart = Math.floor(trimmed.length * 0.2);
+    const vEnd = Math.floor(trimmed.length * 0.8);
+    slot.mfccVowel = computeMFCCMean(trimmed, vStart, vEnd, sr);
+  }
+  slot.onsetInTrim = onset;
+}
+
+document.getElementById('modalZoomIn').addEventListener('click', () => { modal.zoom *= 1.6; renderModal(); });
+document.getElementById('modalZoomOut').addEventListener('click', () => { modal.zoom = Math.max(1, modal.zoom / 1.6); renderModal(); });
+document.getElementById('modalZoomReset').addEventListener('click', () => { modal.zoom = 1; modal.offset = 0; renderModal(); });
+document.getElementById('modalTrimReset').addEventListener('click', () => {
+  const slot = state.slots[modal.slotIdx];
+  if (!slot) return;
+  // re-run auto-trim
+  const samples = slot.buffer.getChannelData(0);
+  const sr = slot.buffer.sampleRate;
+  const trim = getTrimRange(samples, sr);
+  slot.trim = trim;
+  reanalyzeSlotWithTrim(slot);
+  modal.trimStart = trim.start;
+  modal.trimEnd = trim.end;
+  modal.onsetIdx = slot.onsetInTrim !== null ? trim.start + slot.onsetInTrim : -1;
+  updateModalInfo();
+  renderSlots();
+  renderAll();
+  renderModal();
+});
+
+// Playback
+async function startPlay() {
+  if (!modal.buffer || modal.playSource) return;
+  await ensureAudio();
+  const src = audioCtx.createBufferSource();
+  src.buffer = modal.buffer;
+  src.connect(audioCtx.destination);
+  src.onended = () => {
+    if (modal.playSource === src) {
+      modal.playSource = null;
+      modal.playheadIdx = -1;
+      if (modal.rafId) { cancelAnimationFrame(modal.rafId); modal.rafId = 0; }
+      document.getElementById('modalPlay').textContent = '▶ 再生';
+      renderModal();
+    }
+  };
+  src.start(0, modal.playStartOffset);
+  modal.playSource = src;
+  modal.playStartTime = audioCtx.currentTime;
+  document.getElementById('modalPlay').textContent = '⏸ 停止';
+  const loop = () => {
+    if (!modal.playSource) return;
+    const elapsed = audioCtx.currentTime - modal.playStartTime;
+    modal.playheadIdx = Math.floor((modal.playStartOffset + elapsed) * modal.sr);
+    if (modal.playheadIdx >= modal.samples.length) return;
+    renderModal();
+    modal.rafId = requestAnimationFrame(loop);
+  };
+  modal.rafId = requestAnimationFrame(loop);
+}
+function stopPlay() {
+  if (modal.playSource) {
+    try { modal.playSource.onended = null; modal.playSource.stop(); } catch {}
+    modal.playSource = null;
+  }
+  if (modal.rafId) { cancelAnimationFrame(modal.rafId); modal.rafId = 0; }
+  modal.playheadIdx = -1;
+  modal.playStartOffset = 0;
+  document.getElementById('modalPlay').textContent = '▶ 再生';
+  renderModal();
+}
+document.getElementById('modalPlay').addEventListener('click', () => {
+  if (modal.playSource) stopPlay(); else startPlay();
+});
+
+// ============================================================
+// Init
+// ============================================================
+buildPatternGrid();
+window.addEventListener('resize', renderAll);
+requestAnimationFrame(renderAll);
+</script>
+</body>
+</html>

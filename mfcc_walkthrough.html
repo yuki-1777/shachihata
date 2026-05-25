@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MFCC を見てみよう</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Helvetica Neue", sans-serif;
+    background: #fafafa;
+    color: #222;
+    font-size: 15px;
+    line-height: 1.65;
+  }
+  header {
+    padding: 14px 24px;
+    background: #fff;
+    border-bottom: 1px solid #e5e5e5;
+  }
+  header h1 { font-size: 19px; margin: 0; font-weight: 600; letter-spacing: 0.02em; }
+  header p { margin: 4px 0 0; font-size: 13px; color: #888; }
+
+  .controls {
+    background: #fff;
+    border-bottom: 1px solid #e5e5e5;
+    padding: 16px 24px;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .rec-btn {
+    padding: 12px 20px;
+    background: #222;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .rec-btn.recording { background: #dc2626; }
+  .samples { display: flex; gap: 4px; }
+  .samples button {
+    padding: 8px 14px;
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .samples button:hover { background: #e0e0e0; }
+  .info-text { color: #666; font-size: 13px; }
+
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+  .step {
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    padding: 18px 24px 20px;
+    margin-bottom: 16px;
+    position: relative;
+  }
+  .step-num {
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    background: #2563eb;
+    color: #fff;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 28px;
+    font-size: 14px;
+    font-weight: 700;
+    margin-right: 10px;
+    vertical-align: middle;
+  }
+  .step h2 {
+    display: inline-block;
+    margin: 0 0 8px;
+    font-size: 17px;
+    font-weight: 600;
+    vertical-align: middle;
+  }
+  .step .desc {
+    font-size: 13px;
+    color: #555;
+    line-height: 1.7;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    background: #f9fafb;
+    border-left: 3px solid #2563eb;
+    border-radius: 4px;
+  }
+  .step .desc b { color: #222; }
+  .step canvas {
+    display: block;
+    width: 100%;
+    height: 160px;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 4px;
+  }
+  .step .stat {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #666;
+    font-family: ui-monospace, monospace;
+  }
+  .arrow {
+    text-align: center;
+    color: #aaa;
+    font-size: 24px;
+    line-height: 1;
+    padding: 4px 0;
+  }
+</style>
+</head>
+<body>
+<div style="position:fixed;top:8px;left:12px;z-index:200;"><a href="index.html" style="font-size:11px;color:#666;text-decoration:none;background:rgba(255,255,255,0.95);padding:4px 10px;border:1px solid #e5e5e5;border-radius:4px;font-family:-apple-system,sans-serif;">← トップ</a></div>
+
+<header>
+  <h1>MFCC を見てみよう</h1>
+  <p>録音 → 9ステップで何が起きているかを目で追うツール。各段の入力と出力をビジュアル化します。</p>
+</header>
+
+<div class="controls">
+  <button class="rec-btn" id="recBtn">押している間 録音</button>
+  <div class="samples">
+    <button data-vowel="a">あ</button>
+    <button data-vowel="i">い</button>
+    <button data-vowel="u">う</button>
+    <button data-vowel="e">え</button>
+    <button data-vowel="o">お</button>
+  </div>
+  <span class="info-text" id="infoText">合成音か録音を選んでください</span>
+</div>
+
+<main>
+
+<div class="step">
+  <span class="step-num">1</span><h2>元の波形から中央25msだけ切り出す</h2>
+  <div class="desc">
+    MFCCは「ある瞬間」の声を分析する。声は時間とともに変わるので、<b>25ミリ秒という短い時間窓</b>に区切って解析する（人間の声は20-40msの間ほぼ一定なので、この長さがちょうどいい）。
+  </div>
+  <canvas id="step1"></canvas>
+  <div class="stat" id="stat1"></div>
+</div>
+
+<div class="arrow">↓</div>
+
+<div class="step">
+  <span class="step-num">2</span><h2>窓掛け（Hann窓）を掛ける</h2>
+  <div class="desc">
+    切り取った両端をブツッと切ると、FFTが「不連続点」を周波数のノイズとして拾ってしまう（<b>スペクトル漏れ</b>）。これを防ぐため、両端を滑らかに0に落とす<b>Hann窓</b>を掛け算する。山型の重みを掛けるイメージ。
+  </div>
+  <canvas id="step2"></canvas>
+</div>
+
+<div class="arrow">↓</div>
+
+<div class="step">
+  <span class="step-num">3</span><h2>FFT → スペクトル（256本のbin）</h2>
+  <div class="desc">
+    高速フーリエ変換で「どの周波数の音がどれくらい入っているか」を計算。横軸=周波数、縦軸=その強さ。FFTサイズ512なら、出力は<b>256個の周波数ビン</b>（0〜サンプリングレート/2 まで等間隔）。
+  </div>
+  <canvas id="step3"></canvas>
+</div>
+
+<div class="arrow">↓</div>
+
+<div class="step">
+  <span class="step-num">4</span><h2>パワースペクトル（|X|² で強さを強調）</h2>
+  <div class="desc">
+    各ビンの<b>絶対値の2乗</b>を取ると「エネルギー」になる。山が強調されて谷が落ちる。物理的にはこちらが「音の強さ」に対応。
+  </div>
+  <canvas id="step4"></canvas>
+</div>
+
+<div class="arrow">↓</div>
+
+<div class="step">
+  <span class="step-num">5</span><h2>メルフィルタバンクを重ねる（耳に近い周波数解像度に）</h2>
+  <div class="desc">
+    各フィルタは「<b>掛け算 → 合計</b>」を一度に行う仕組み。スペクトル各点にフィルタの値（三角の高さ）を掛け、全部足し算して<b>1つの数値</b>を出す。三角の中心付近に重みが集中するので「この周波数帯の強さ」を1個の値で代表できる。これを40個並べたのがフィルタバンク。<br>
+    <b>低音は細かく、高音はざっくり</b>並べる（メル尺度＝人の耳の感度に近い）。
+  </div>
+  <div style="margin-bottom:8px;font-size:12px;">
+    <label>フィルタを1つ選んで動きを見る：</label>
+    <input type="range" id="filterIdx" min="0" max="39" value="15" style="width:240px;vertical-align:middle;">
+    <span style="font-family:ui-monospace,monospace;color:#dc2626;font-weight:600;" id="filterIdxVal">#15</span>
+    <span id="filterFreqText" style="font-size:11px;color:#666;margin-left:8px;"></span>
+  </div>
+  <canvas id="step5"></canvas>
+  <canvas id="step5b" style="margin-top:6px;height:120px;"></canvas>
+  <div class="stat" id="stat5"></div>
+</div>
+
+<div class="arrow">↓</div>
+
+<div class="step">
+  <span class="step-num">6</span><h2>メル帯域エネルギー（256本 → 40本に集約）</h2>
+  <div class="desc">
+    各三角フィルタの出力を1個ずつ取り出すと、<b>40個の数値</b>になる。256本の生スペクトルが40本に圧縮された状態。情報を絞りつつ、耳の感度に合わせた解像度になっている。
+  </div>
+  <canvas id="step6"></canvas>
+</div>
+
+<div class="arrow">↓</div>
+
+<div class="step">
+  <span class="step-num">7</span><h2>log を取る（音量の聴感に合わせる）</h2>
+  <div class="desc">
+    人の聴覚は<b>音量を対数的に</b>感じる（音量が10倍でも「2倍」くらいに聞こえる）。各40個の値の log を取って、聴感に近いスケールに整える。dB表示と同じ発想。
+  </div>
+  <canvas id="step7"></canvas>
+</div>
+
+<div class="arrow">↓</div>
+
+<div class="step">
+  <span class="step-num">8</span><h2>DCT（離散コサイン変換）で「形の特徴」に分解</h2>
+  <div class="desc">
+    40個の値を、「ゆっくりした起伏」と「細かい振動」に分解する変換。<b>DCT係数1</b>＝全体のレベル、<b>2</b>＝低域寄り/高域寄り、<b>3</b>＝なめらかな1つの山、<b>4-13</b>＝だんだん細かい起伏、<b>14以降</b>＝細かい振動。FFTのスペクトル版みたいなもの。
+  </div>
+  <canvas id="step8"></canvas>
+</div>
+
+<div class="arrow">↓</div>
+
+<div class="step">
+  <span class="step-num">9</span><h2>上位13個だけ残す = MFCC</h2>
+  <div class="desc">
+    DCT係数のうち<b>最初の13個</b>がスペクトルの「なめらかな包絡形状」＝声道の形を表す。それ以降は F0倍音などの細かい振動なので捨てる。<b>残った13個の数値</b>が、その人がその瞬間に出した声の「声道の指紋」になる。
+  </div>
+  <canvas id="step9"></canvas>
+  <div class="stat" id="stat9"></div>
+</div>
+
+<div class="arrow">↓</div>
+
+<div class="step">
+  <span class="step-num">10</span><h2>13個のコサイン波を MFCC の重みで足し算 → 包絡が出来上がる</h2>
+  <div class="desc">
+    DCTは「あらかじめ決まった13個の波の形」を、MFCC係数の重みで足し合わせる仕組み。<br>
+    ・<b>上のグラフ</b>＝13個のコサイン波（各 MFCC値で拡大／反転している）。色が薄い線が「素の波」、濃い線が「MFCC値を掛けた後」。<br>
+    ・<b>下のグラフ</b>＝それらを全部足し合わせた結果 ＝ 元の log-mel エネルギーの近似（包絡）。<br>
+    重みがマイナスなら波が上下反転して足される。13個を組み合わせるだけで、フォルマントの起伏が描けるのが見える。
+  </div>
+  <canvas id="step10a" style="height: 220px;"></canvas>
+  <canvas id="step10b" style="height: 140px; margin-top: 6px;"></canvas>
+  <div class="stat" id="stat10a"></div>
+</div>
+
+<div class="arrow">↓</div>
+
+<div class="step">
+  <span class="step-num">11</span><h2>MFCCがちゃんと外形を捉えているか、生スペクトルに重ねて確認</h2>
+  <div class="desc">
+    「MFCCはスペクトルの包絡を表す」と言うけど、本当か？ 元の<b>パワースペクトル（dB）</b>の上に、MFCCから求めた<b>包絡曲線</b>を重ねて目で確かめる。<br>
+    ・<b>水色の棒</b>＝元の生パワースペクトル（dB表示）<br>
+    ・<b>赤い線</b>＝MFCC から復元した包絡（メルフィルタ中心点をなめらかに繋いだもの）<br>
+    赤線が水色のバーの「大きな起伏」をなぞっていれば、MFCCが正しく外形を捉えている証拠。
+  </div>
+  <div style="margin-bottom:8px;font-size:12px;">
+    <label>包絡計算に使うMFCC係数の数：</label>
+    <input type="range" id="recCoefs" min="2" max="40" value="13" style="width:240px;vertical-align:middle;">
+    <span style="font-family:ui-monospace,monospace;color:#dc2626;font-weight:600;" id="recCoefsVal">13個</span>
+  </div>
+  <canvas id="step11" style="height: 220px;"></canvas>
+  <div class="stat" id="stat11"></div>
+</div>
+
+</main>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+const state = {
+  buffer: null,
+  sampleRate: 44100,
+  fftSize: 512,
+  numMelFilters: 40,
+  numMfcc: 13,
+};
+
+let audioCtx, activeRecorder, activeChunks = [], persistentStream;
+
+// ============================================================
+// FFT (Cooley-Tukey)
+// ============================================================
+function fft(re, im) {
+  const N = re.length;
+  for (let i = 1, j = 0; i < N; i++) {
+    let bit = N >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+  }
+  for (let len = 2; len <= N; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < N; i += len) {
+      let cRe = 1, cIm = 0;
+      for (let j = 0; j < (len >> 1); j++) {
+        const h = i + j + (len >> 1);
+        const vRe = re[h] * cRe - im[h] * cIm, vIm = re[h] * cIm + im[h] * cRe;
+        re[h] = re[i+j] - vRe; im[h] = im[i+j] - vIm;
+        re[i+j] += vRe; im[i+j] += vIm;
+        const nr = cRe * wRe - cIm * wIm; cIm = cRe * wIm + cIm * wRe; cRe = nr;
+      }
+    }
+  }
+}
+
+// ============================================================
+// Mel utilities
+// ============================================================
+function hzToMel(hz) { return 2595 * Math.log10(1 + hz / 700); }
+function melToHz(mel) { return 700 * (Math.pow(10, mel / 2595) - 1); }
+
+function makeMelFilterbank(numFilters, fftSize, sampleRate, fMin = 0, fMax = null) {
+  fMax = fMax || sampleRate / 2;
+  const melMin = hzToMel(fMin);
+  const melMax = hzToMel(fMax);
+  const melPts = [];
+  for (let i = 0; i < numFilters + 2; i++) melPts.push(melMin + (melMax - melMin) * i / (numFilters + 1));
+  const hzPts = melPts.map(melToHz);
+  const binPts = hzPts.map(hz => Math.floor((fftSize + 1) * hz / sampleRate));
+  const filters = [];
+  for (let i = 1; i <= numFilters; i++) {
+    const f = new Float32Array(fftSize / 2);
+    const lo = binPts[i - 1], mid = binPts[i], hi = binPts[i + 1];
+    for (let k = lo; k < mid; k++) if (mid > lo) f[k] = (k - lo) / (mid - lo);
+    for (let k = mid; k < hi; k++) if (hi > mid) f[k] = (hi - k) / (hi - mid);
+    filters.push({ data: f, lo, mid, hi, freqLo: hzPts[i-1], freqMid: hzPts[i], freqHi: hzPts[i+1] });
+  }
+  return filters;
+}
+
+// DCT-II (type 2)
+function dct(input) {
+  const N = input.length;
+  const out = new Float32Array(N);
+  for (let k = 0; k < N; k++) {
+    let s = 0;
+    for (let n = 0; n < N; n++) s += input[n] * Math.cos(Math.PI * k * (n + 0.5) / N);
+    out[k] = s;
+  }
+  return out;
+}
+
+// Inverse DCT (DCT-III) — recovers original (or partial reconstruction if you pass fewer coeffs)
+// Uses only the first `coeffs.length` MFCC values, treats the rest as 0
+function idct(coeffs, N) {
+  const out = new Float32Array(N);
+  for (let n = 0; n < N; n++) {
+    let s = coeffs[0];
+    for (let k = 1; k < coeffs.length; k++) {
+      s += 2 * coeffs[k] * Math.cos(Math.PI * k * (n + 0.5) / N);
+    }
+    out[n] = s / N;
+  }
+  return out;
+}
+
+// ============================================================
+// Compute pipeline (returns intermediate results)
+// ============================================================
+function computeMfccPipeline(samples, sampleRate) {
+  const N = state.fftSize;
+  const center = Math.floor(samples.length / 2);
+  const start = Math.max(0, center - N / 2);
+  const sliceTimeMs = (N / sampleRate) * 1000;
+
+  // 1. raw waveform + slice
+  const sliced = new Float32Array(N);
+  for (let i = 0; i < N; i++) sliced[i] = samples[start + i] || 0;
+  // remove DC
+  let mean = 0; for (let i = 0; i < N; i++) mean += sliced[i]; mean /= N;
+  for (let i = 0; i < N; i++) sliced[i] -= mean;
+
+  // 2. windowed
+  const win = new Float32Array(N);
+  const winned = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    win[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (N - 1)));
+    winned[i] = sliced[i] * win[i];
+  }
+
+  // 3. FFT → magnitude
+  const re = new Float32Array(N), im = new Float32Array(N);
+  for (let i = 0; i < N; i++) re[i] = winned[i];
+  fft(re, im);
+  const mag = new Float32Array(N / 2);
+  for (let k = 0; k < N / 2; k++) mag[k] = Math.sqrt(re[k]*re[k] + im[k]*im[k]);
+
+  // 4. power
+  const power = new Float32Array(N / 2);
+  for (let k = 0; k < N / 2; k++) power[k] = mag[k] * mag[k];
+
+  // 5,6. mel filterbank → energies
+  const filters = makeMelFilterbank(state.numMelFilters, N, sampleRate, 0, sampleRate / 2);
+  const melE = new Float32Array(state.numMelFilters);
+  for (let m = 0; m < state.numMelFilters; m++) {
+    let s = 0;
+    for (let k = 0; k < N / 2; k++) s += power[k] * filters[m].data[k];
+    melE[m] = s;
+  }
+
+  // 7. log
+  const logMel = new Float32Array(state.numMelFilters);
+  for (let m = 0; m < state.numMelFilters; m++) logMel[m] = Math.log(Math.max(1e-12, melE[m]));
+
+  // 8. DCT
+  const dctOut = dct(logMel);
+
+  return {
+    sliced, win, winned, mag, power, filters, melE, logMel, dctOut,
+    sliceStart: start, sliceLen: N, sliceTimeMs,
+  };
+}
+
+// ============================================================
+// Audio
+// ============================================================
+async function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
+}
+async function ensureStream() {
+  if (persistentStream && persistentStream.active) return persistentStream;
+  try {
+    persistentStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+    return persistentStream;
+  } catch (err) { alert('マイクが取得できません: ' + err.message); return null; }
+}
+async function startRec() {
+  if (activeRecorder) return;
+  await ensureAudio();
+  const stream = await ensureStream(); if (!stream) return;
+  activeChunks = [];
+  activeRecorder = new MediaRecorder(stream);
+  activeRecorder.ondataavailable = e => activeChunks.push(e.data);
+  activeRecorder.onstop = async () => {
+    try {
+      if (!activeChunks.length) return;
+      const blob = new Blob(activeChunks, { type: activeChunks[0].type || 'audio/webm' });
+      const ab = await blob.arrayBuffer();
+      if (!ab.byteLength) return;
+      const audioBuf = await audioCtx.decodeAudioData(ab);
+      setBuffer(audioBuf);
+    } catch (err) { console.error(err); } finally { activeRecorder = null; }
+  };
+  activeRecorder.start(50);
+  document.getElementById('recBtn').classList.add('recording');
+  document.getElementById('recBtn').textContent = '録音中…';
+}
+function stopRec() {
+  if (!activeRecorder) return;
+  try { activeRecorder.requestData(); } catch {}
+  try { activeRecorder.stop(); } catch {}
+  document.getElementById('recBtn').classList.remove('recording');
+  document.getElementById('recBtn').textContent = '押している間 録音';
+}
+const recBtn = document.getElementById('recBtn');
+recBtn.addEventListener('mousedown', e => { e.preventDefault(); startRec(); });
+recBtn.addEventListener('mouseup', e => { e.preventDefault(); stopRec(); });
+recBtn.addEventListener('mouseleave', () => { if (activeRecorder) stopRec(); });
+
+// Sample vowels
+document.querySelectorAll('.samples button').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    await ensureAudio();
+    const sr = audioCtx.sampleRate;
+    const dur = 1.0;
+    const buf = audioCtx.createBuffer(1, Math.floor(sr * dur), sr);
+    const data = buf.getChannelData(0);
+    const f0 = 150;
+    const formants = {
+      a: [760, 1280, 2500], i: [300, 2200, 3000],
+      u: [350, 1250, 2300], e: [480, 1900, 2500], o: [480, 900, 2400],
+    }[btn.dataset.vowel];
+    for (let i = 0; i < data.length; i++) {
+      const t = i / sr;
+      let v = 0;
+      for (let h = 1; h <= 30; h++) {
+        const f = f0 * h;
+        if (f > sr / 2) break;
+        let amp = 0;
+        for (const fmt of formants) { const d = (f - fmt) / 80; amp += Math.exp(-d * d); }
+        v += amp * Math.sin(2 * Math.PI * f * t) / (h * 0.7 + 1);
+      }
+      const env = Math.min(1, t * 10) * Math.min(1, (dur - t) * 10);
+      data[i] = v * env * 0.15;
+    }
+    setBuffer(buf);
+  });
+});
+
+function setBuffer(buf) {
+  state.buffer = buf;
+  state.sampleRate = buf.sampleRate;
+  document.getElementById('infoText').textContent =
+    `録音: ${(buf.duration * 1000).toFixed(0)}ms / サンプリング ${buf.sampleRate}Hz`;
+  renderAll();
+}
+
+// ============================================================
+// Canvas utilities
+// ============================================================
+function setupCanvas(id) {
+  const canvas = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, rect.width, rect.height);
+  return { ctx, W: rect.width, H: rect.height };
+}
+
+function drawWaveformLine(ctx, W, H, samples, color = '#2563eb') {
+  const cy = H / 2;
+  ctx.strokeStyle = '#e5e5e5'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(W, cy); ctx.stroke();
+  let peak = 0;
+  for (let i = 0; i < samples.length; i++) { const a = Math.abs(samples[i]); if (a > peak) peak = a; }
+  if (peak === 0) peak = 1;
+  ctx.strokeStyle = color; ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  for (let x = 0; x < W; x++) {
+    const i = Math.floor(x * samples.length / W);
+    const y = cy - (samples[i] / peak) * (H/2 - 4);
+    if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+function drawBars(ctx, W, H, values, opts = {}) {
+  const padL = opts.padL || 36, padR = opts.padR || 8, padT = opts.padT || 8, padB = opts.padB || 22;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const N = values.length;
+  // determine range
+  let min = opts.minOverride ?? Infinity, max = opts.maxOverride ?? -Infinity;
+  for (const v of values) { if (v < min) min = v; if (v > max) max = v; }
+  if (min === max) max = min + 1;
+  const baseline = min < 0 ? 0 : min;
+  const baseY = padT + plotH * (max - baseline) / (max - min);
+  // axis
+  ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(padL, baseY); ctx.lineTo(padL + plotW, baseY); ctx.stroke();
+  // y-labels
+  ctx.fillStyle = '#666'; ctx.font = '10px sans-serif';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  ctx.fillText(max.toFixed(2), padL - 4, padT + 4);
+  ctx.fillText(min.toFixed(2), padL - 4, padT + plotH - 4);
+  if (min < 0) ctx.fillText('0', padL - 4, baseY);
+  // bars
+  const barW = plotW / N;
+  for (let i = 0; i < N; i++) {
+    const v = values[i];
+    const ratio = (v - baseline) / (max - min);
+    const h = plotH * ratio;
+    const x = padL + i * barW;
+    const y = v >= baseline ? baseY - h : baseY;
+    ctx.fillStyle = opts.color ? opts.color(i, v) : '#2563eb';
+    ctx.fillRect(x, y, Math.max(0.5, barW - 0.5), Math.abs(h));
+  }
+  // x-labels
+  ctx.fillStyle = '#666'; ctx.font = '10px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  if (opts.xLabels) {
+    for (const lbl of opts.xLabels) {
+      const x = padL + (lbl.i + 0.5) * barW;
+      ctx.fillText(lbl.text, x, padT + plotH + 4);
+    }
+  } else {
+    const ticks = [0, Math.floor(N/4), Math.floor(N/2), Math.floor(3*N/4), N-1];
+    for (const i of ticks) ctx.fillText(String(i), padL + (i + 0.5) * barW, padT + plotH + 4);
+  }
+  if (opts.xTitle) {
+    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = '#888';
+    ctx.fillText(opts.xTitle, padL + plotW, padT + plotH + 18);
+  }
+}
+
+// ============================================================
+// Step renderers
+// ============================================================
+function renderAll() {
+  if (!state.buffer) {
+    ['step1','step2','step3','step4','step5','step5b','step6','step7','step8','step9','step10a','step10b','step11'].forEach(id => {
+      const { ctx, W, H } = setupCanvas(id);
+      ctx.fillStyle = '#bbb'; ctx.font = '13px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('録音か合成音を選んでください', W/2, H/2);
+    });
+    return;
+  }
+  const samples = state.buffer.getChannelData(0);
+  const sr = state.buffer.sampleRate;
+  const r = computeMfccPipeline(samples, sr);
+
+  // Step 1: full waveform + highlight slice
+  {
+    const { ctx, W, H } = setupCanvas('step1');
+    drawWaveformLine(ctx, W, H, samples);
+    const xS = (r.sliceStart / samples.length) * W;
+    const xE = ((r.sliceStart + r.sliceLen) / samples.length) * W;
+    ctx.fillStyle = 'rgba(245, 158, 11, 0.18)';
+    ctx.fillRect(xS, 0, xE - xS, H);
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 2]);
+    ctx.strokeRect(xS, 0, xE - xS, H);
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#f59e0b';
+    ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(`中央 ${r.sliceTimeMs.toFixed(1)}ms`, (xS+xE)/2, 14);
+  }
+  document.getElementById('stat1').textContent =
+    `録音全体 ${(samples.length / sr * 1000).toFixed(0)}ms / 切り出した範囲 ${r.sliceLen}サンプル = ${r.sliceTimeMs.toFixed(1)}ms`;
+
+  // Step 2: sliced + window overlay + windowed result
+  {
+    const { ctx, W, H } = setupCanvas('step2');
+    const cy = H / 2;
+    // sliced (light blue)
+    let peakS = 0; for (let i = 0; i < r.sliced.length; i++) peakS = Math.max(peakS, Math.abs(r.sliced[i]));
+    if (peakS === 0) peakS = 1;
+    ctx.strokeStyle = '#9ca3af';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x < W; x++) {
+      const i = Math.floor(x * r.sliced.length / W);
+      ctx.lineTo(x, cy - (r.sliced[i] / peakS) * (H/2 - 4));
+    }
+    ctx.stroke();
+    // window (orange)
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    for (let x = 0; x < W; x++) {
+      const i = Math.floor(x * r.win.length / W);
+      ctx.lineTo(x, cy - r.win[i] * (H/2 - 4));
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // windowed (blue, prominent)
+    let peakW = 0; for (let i = 0; i < r.winned.length; i++) peakW = Math.max(peakW, Math.abs(r.winned[i]));
+    if (peakW === 0) peakW = 1;
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let x = 0; x < W; x++) {
+      const i = Math.floor(x * r.winned.length / W);
+      ctx.lineTo(x, cy - (r.winned[i] / peakW) * (H/2 - 4));
+    }
+    ctx.stroke();
+    // legend
+    ctx.font = '11px sans-serif'; ctx.textAlign = 'left';
+    ctx.fillStyle = '#9ca3af'; ctx.fillText('— 元波形', 8, 14);
+    ctx.fillStyle = '#f59e0b'; ctx.fillText('— Hann窓', 70, 14);
+    ctx.fillStyle = '#2563eb'; ctx.fillText('— 掛けた結果', 130, 14);
+  }
+
+  // Step 3: magnitude spectrum
+  {
+    const { ctx, W, H } = setupCanvas('step3');
+    const xLabels = [];
+    const fres = sr / state.fftSize;
+    [500, 1000, 2000, 4000, 8000].forEach(f => {
+      const k = Math.round(f / fres);
+      if (k < r.mag.length) xLabels.push({ i: k, text: f >= 1000 ? (f/1000)+'k' : f+'' });
+    });
+    drawBars(ctx, W, H, r.mag, { xLabels, xTitle: 'Hz', color: () => '#2563eb' });
+  }
+
+  // Step 4: power spectrum
+  {
+    const { ctx, W, H } = setupCanvas('step4');
+    const xLabels = [];
+    const fres = sr / state.fftSize;
+    [500, 1000, 2000, 4000, 8000].forEach(f => {
+      const k = Math.round(f / fres);
+      if (k < r.power.length) xLabels.push({ i: k, text: f >= 1000 ? (f/1000)+'k' : f+'' });
+    });
+    drawBars(ctx, W, H, r.power, { xLabels, xTitle: 'Hz', color: () => '#1e40af' });
+  }
+
+  // Step 5: power spectrum with filter overlay (selected filter highlighted)
+  const selectedIdx = parseInt(document.getElementById('filterIdx').value, 10);
+  {
+    const { ctx, W, H } = setupCanvas('step5');
+    const padL = 36, padR = 8, padT = 8, padB = 22;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    // power
+    let pMax = 0; for (const v of r.power) if (v > pMax) pMax = v;
+    if (pMax === 0) pMax = 1;
+    ctx.fillStyle = '#dbeafe';
+    const barW = plotW / r.power.length;
+    for (let k = 0; k < r.power.length; k++) {
+      const h = plotH * (r.power[k] / pMax);
+      ctx.fillRect(padL + k * barW, padT + plotH - h, Math.max(0.5, barW - 0.5), h);
+    }
+    // all filters dimmed
+    for (let m = 0; m < r.filters.length; m++) {
+      if (m === selectedIdx) continue;
+      ctx.strokeStyle = 'rgba(150, 150, 150, 0.25)';
+      ctx.lineWidth = 0.8;
+      const f = r.filters[m];
+      ctx.beginPath();
+      ctx.moveTo(padL + f.lo * barW, padT + plotH);
+      ctx.lineTo(padL + f.mid * barW, padT + plotH - plotH * 0.5);
+      ctx.lineTo(padL + f.hi * barW, padT + plotH);
+      ctx.stroke();
+    }
+    // selected filter highlighted (red, thick, filled)
+    const sf = r.filters[selectedIdx];
+    ctx.fillStyle = 'rgba(220, 38, 38, 0.15)';
+    ctx.beginPath();
+    ctx.moveTo(padL + sf.lo * barW, padT + plotH);
+    ctx.lineTo(padL + sf.mid * barW, padT + plotH - plotH * 0.55);
+    ctx.lineTo(padL + sf.hi * barW, padT + plotH);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // axes
+    ctx.fillStyle = '#666'; ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const fres = sr / state.fftSize;
+    [500, 1000, 2000, 4000, 8000].forEach(f => {
+      const k = Math.round(f / fres);
+      if (k < r.power.length) ctx.fillText(f >= 1000 ? (f/1000)+'k' : f+'', padL + (k+0.5) * barW, padT + plotH + 4);
+    });
+    ctx.fillStyle = '#888';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillText('Hz', padL + plotW, padT + plotH + 18);
+    // title
+    ctx.fillStyle = '#dc2626';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(`フィルタ #${selectedIdx}（${sf.freqLo.toFixed(0)}–${sf.freqHi.toFixed(0)} Hz）`, padL + 4, padT + 4);
+  }
+
+  // Step 5b: power × selected filter
+  {
+    const { ctx, W, H } = setupCanvas('step5b');
+    const padL = 36, padR = 8, padT = 8, padB = 22;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const sf = r.filters[selectedIdx];
+    const product = new Float32Array(r.power.length);
+    for (let k = 0; k < r.power.length; k++) product[k] = r.power[k] * sf.data[k];
+    let pMax = 0; for (const v of product) if (v > pMax) pMax = v;
+    if (pMax === 0) pMax = 1;
+    const barW = plotW / product.length;
+    // filled area
+    ctx.fillStyle = 'rgba(220, 38, 38, 0.45)';
+    for (let k = 0; k < product.length; k++) {
+      const h = plotH * (product[k] / pMax);
+      ctx.fillRect(padL + k * barW, padT + plotH - h, Math.max(0.5, barW - 0.5), h);
+    }
+    // baseline
+    ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padL, padT + plotH); ctx.lineTo(padL + plotW, padT + plotH); ctx.stroke();
+    // axes
+    ctx.fillStyle = '#666'; ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const fres = sr / state.fftSize;
+    [500, 1000, 2000, 4000, 8000].forEach(f => {
+      const k = Math.round(f / fres);
+      if (k < product.length) ctx.fillText(f >= 1000 ? (f/1000)+'k' : f+'', padL + (k+0.5) * barW, padT + plotH + 4);
+    });
+    // title with sum value
+    let sum = 0;
+    for (const v of product) sum += v;
+    ctx.fillStyle = '#dc2626';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(`スペクトル × フィルタ → 全部足すと = ${sum.toExponential(2)}（これがメル帯域 #${selectedIdx} の値）`, padL + 4, padT + 4);
+  }
+
+  // Update filter freq text
+  const sf = r.filters[selectedIdx];
+  document.getElementById('filterFreqText').textContent =
+    `中心 ${sf.freqMid.toFixed(0)}Hz（${sf.freqLo.toFixed(0)}〜${sf.freqHi.toFixed(0)}Hz）`;
+
+  document.getElementById('stat5').textContent =
+    `${state.numMelFilters}個のフィルタ：${r.filters[0].freqLo.toFixed(0)}Hz 〜 ${r.filters[r.filters.length-1].freqHi.toFixed(0)}Hz`;
+
+  // Step 6: mel energies (40 bars)
+  {
+    const { ctx, W, H } = setupCanvas('step6');
+    drawBars(ctx, W, H, r.melE, {
+      xTitle: 'メル帯域 #',
+      color: i => `hsl(${(i / state.numMelFilters) * 280}, 65%, 50%)`,
+    });
+  }
+
+  // Step 7: log mel
+  {
+    const { ctx, W, H } = setupCanvas('step7');
+    drawBars(ctx, W, H, r.logMel, {
+      xTitle: 'メル帯域 #',
+      color: i => `hsl(${(i / state.numMelFilters) * 280}, 65%, 50%)`,
+    });
+  }
+
+  // Step 8: full DCT
+  {
+    const { ctx, W, H } = setupCanvas('step8');
+    drawBars(ctx, W, H, r.dctOut, {
+      xTitle: 'DCT係数 #',
+      color: (i) => i < state.numMfcc ? '#dc2626' : '#9ca3af',
+    });
+  }
+
+  // Step 9: first 13
+  {
+    const { ctx, W, H } = setupCanvas('step9');
+    const mfcc = Array.from(r.dctOut.slice(0, state.numMfcc));
+    const labels = [];
+    for (let i = 0; i < state.numMfcc; i++) labels.push({ i, text: String(i) });
+    drawBars(ctx, W, H, mfcc, {
+      xLabels: labels,
+      xTitle: 'MFCC係数 #',
+      color: () => '#dc2626',
+    });
+  }
+  document.getElementById('stat9').textContent =
+    `MFCC（13個）= [${Array.from(r.dctOut.slice(0, state.numMfcc)).map(v => v.toFixed(2)).join(', ')}]`;
+
+  // Step 10: visualize 13 cosine waves × MFCC weights → sum = envelope
+  const recCoefsN = parseInt(document.getElementById('recCoefs').value, 10);
+  const reconLogMel = idct(r.dctOut.slice(0, recCoefsN), state.numMelFilters);
+
+  // Build basis cos waves and weighted contributions for top chart
+  // For DCT-II inverse: contribution_k[n] = (coeffs[k] / N) * (k==0 ? 1 : 2*cos(π·k·(n+0.5)/N))
+  const N = state.numMelFilters;
+  const basisRaw = [];     // pure cos pattern for each k (range -1..1 ish)
+  const contribs = [];     // weighted contribution (coeffs[k]/N * basis ...)
+  for (let k = 0; k < recCoefsN; k++) {
+    const raw = new Float32Array(N);
+    const weighted = new Float32Array(N);
+    for (let n = 0; n < N; n++) {
+      const c = Math.cos(Math.PI * k * (n + 0.5) / N);
+      raw[n] = c;
+      // contribution to IDCT
+      const factor = (k === 0 ? 1 : 2) / N;
+      weighted[n] = r.dctOut[k] * c * factor;
+    }
+    basisRaw.push(raw);
+    contribs.push(weighted);
+  }
+
+  // Step 10a: 13 cosine waves overlaid + their MFCC-weighted versions
+  {
+    const { ctx, W, H } = setupCanvas('step10a');
+    const padL = 44, padR = 8, padT = 16, padB = 22;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    // Find y range across all weighted contributions
+    let yAbs = 0;
+    for (const c of contribs) for (const v of c) if (Math.abs(v) > yAbs) yAbs = Math.abs(v);
+    if (yAbs === 0) yAbs = 1;
+    const cy = padT + plotH / 2;
+    const yScale = v => cy - (v / yAbs) * (plotH / 2 - 4);
+    // Center line + labels
+    ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padL, cy); ctx.lineTo(padL + plotW, cy); ctx.stroke();
+    ctx.fillStyle = '#666'; ctx.font = '10px sans-serif';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText('+' + yAbs.toFixed(1), padL - 4, padT + 4);
+    ctx.fillText('0', padL - 4, cy);
+    ctx.fillText('-' + yAbs.toFixed(1), padL - 4, padT + plotH - 4);
+    // x labels
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (const i of [0, 10, 20, 30, 39]) {
+      ctx.fillText(String(i), padL + (i + 0.5) * (plotW / N), padT + plotH + 4);
+    }
+    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = '#888';
+    ctx.fillText('メル帯域 #', padL + plotW, padT + plotH + 18);
+
+    // Draw raw cos patterns (faint, in MFCC max scale) for visual reference of the pattern shape
+    // (Scaled to ±yAbs * 0.15 so they're visible but background)
+    for (let k = 0; k < recCoefsN; k++) {
+      const hue = (k / recCoefsN) * 280;
+      ctx.strokeStyle = `hsla(${hue}, 60%, 60%, 0.18)`;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      for (let n = 0; n < N; n++) {
+        const x = padL + (n + 0.5) * (plotW / N);
+        const y = cy - basisRaw[k][n] * yAbs * 0.18;
+        if (n === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    // Draw weighted contributions (bold)
+    for (let k = 0; k < recCoefsN; k++) {
+      const hue = (k / recCoefsN) * 280;
+      ctx.strokeStyle = `hsl(${hue}, 70%, 45%)`;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      for (let n = 0; n < N; n++) {
+        const x = padL + (n + 0.5) * (plotW / N);
+        const y = yScale(contribs[k][n]);
+        if (n === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    // Title / legend
+    ctx.font = '11px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillStyle = '#666';
+    ctx.fillText(`${recCoefsN}個のコサイン波 × MFCC値（各色1本ずつ、薄い線=素のパターン、濃い線=重み付け後）`, padL + 4, 2);
+  }
+
+  // Step 10b: sum of all contributions = log-mel envelope
+  {
+    const { ctx, W, H } = setupCanvas('step10b');
+    const padL = 44, padR = 8, padT = 14, padB = 22;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    // Sum is just reconLogMel (the IDCT result)
+    let yMin = Infinity, yMax = -Infinity;
+    for (const v of reconLogMel) { if (v < yMin) yMin = v; if (v > yMax) yMax = v; }
+    for (const v of r.logMel) { if (v < yMin) yMin = v; if (v > yMax) yMax = v; }
+    if (yMin === yMax) yMax = yMin + 1;
+    const yScale = v => padT + plotH - (v - yMin) / (yMax - yMin) * plotH;
+    // Original log-mel as faint bars
+    const barW = plotW / N;
+    ctx.fillStyle = 'rgba(96, 165, 250, 0.4)';
+    const yZero = yScale(Math.max(yMin, 0));
+    for (let n = 0; n < N; n++) {
+      const x = padL + n * barW;
+      const y = yScale(r.logMel[n]);
+      ctx.fillRect(x, Math.min(y, yZero), Math.max(0.5, barW - 0.5), Math.abs(y - yZero));
+    }
+    // Sum line (bold red)
+    ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    for (let n = 0; n < N; n++) {
+      const x = padL + (n + 0.5) * barW;
+      const y = yScale(reconLogMel[n]);
+      if (n === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    // Y labels
+    ctx.fillStyle = '#666'; ctx.font = '10px sans-serif';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText(yMax.toFixed(1), padL - 4, padT + 4);
+    ctx.fillText(yMin.toFixed(1), padL - 4, padT + plotH - 4);
+    // X labels
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (const i of [0, 10, 20, 30, 39]) {
+      ctx.fillText(String(i), padL + (i + 0.5) * barW, padT + plotH + 4);
+    }
+    // Title
+    ctx.fillStyle = '#666'; ctx.font = '11px sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('上の13本を全部足した結果（赤）と元の log-mel（水色バー）', padL + 4, 0);
+  }
+  document.getElementById('stat10a').textContent =
+    `13個のコサイン波の足し算で、元の log-mel エネルギーの形が再現される。これが「MFCC が形状情報を13個に圧縮している」の実体。`;
+
+  // Step 11: overlay envelope on original power spectrum (was step 10)
+  {
+    const { ctx, W, H } = setupCanvas('step11');
+    const padL = 44, padR = 8, padT = 14, padB = 24;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const fres = sr / state.fftSize;
+    const fMax = sr / 2;
+    // Convert original power to dB (relative to peak)
+    let peakP = 0;
+    for (const v of r.power) if (v > peakP) peakP = v;
+    if (peakP === 0) peakP = 1;
+    const powerDb = new Float32Array(r.power.length);
+    for (let k = 0; k < r.power.length; k++) {
+      powerDb[k] = 10 * Math.log10(Math.max(1e-10, r.power[k] / peakP));
+    }
+    // Y range: -80dB to 0dB
+    const yMin = -80, yMax = 5;
+    const yScale = v => padT + plotH - (Math.max(yMin, Math.min(yMax, v)) - yMin) / (yMax - yMin) * plotH;
+    // Log frequency mapping (60Hz to fMax)
+    const fLogMin = Math.log(60), fLogMax = Math.log(fMax);
+    const xScale = f => {
+      if (f < 60) return padL;
+      return padL + (Math.log(f) - fLogMin) / (fLogMax - fLogMin) * plotW;
+    };
+    // Grid lines
+    ctx.strokeStyle = '#f0f0f0'; ctx.lineWidth = 1;
+    for (const f of [100, 500, 1000, 2000, 4000, 8000]) {
+      if (f > fMax) continue;
+      const x = xScale(f);
+      ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + plotH); ctx.stroke();
+    }
+    for (const db of [0, -20, -40, -60, -80]) {
+      const y = yScale(db);
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+    }
+    // Y axis labels
+    ctx.fillStyle = '#666'; ctx.font = '10px sans-serif';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (const db of [0, -20, -40, -60, -80]) {
+      ctx.fillText(db + 'dB', padL - 4, yScale(db));
+    }
+    // X axis labels
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (const f of [100, 500, 1000, 2000, 4000, 8000]) {
+      if (f > fMax) continue;
+      ctx.fillText(f >= 1000 ? (f/1000)+'k' : f+'Hz', xScale(f), padT + plotH + 4);
+    }
+    // Original power spectrum as light blue bars
+    ctx.fillStyle = 'rgba(96, 165, 250, 0.55)';
+    for (let k = 1; k < r.power.length; k++) {
+      const f = k * fres;
+      if (f < 60 || f > fMax) continue;
+      const fPrev = (k - 1) * fres;
+      const x = Math.max(padL, xScale(fPrev));
+      const x2 = xScale(f);
+      const y = yScale(powerDb[k]);
+      const y0 = yScale(yMin);
+      ctx.fillRect(x, Math.min(y, y0), Math.max(0.5, x2 - x), Math.abs(y - y0));
+    }
+    // Compute mel envelope curve in dB
+    // The reconstructed log-mel is in natural log of "summed power within band"
+    // Convert to dB: 10 * log10(exp(value)) = value * 10 / ln(10)
+    // Also offset so peak matches 0dB
+    const envDb = new Float32Array(state.numMelFilters);
+    let envMax = -Infinity;
+    for (let m = 0; m < state.numMelFilters; m++) {
+      envDb[m] = reconLogMel[m] * 10 / Math.LN10;
+      if (envDb[m] > envMax) envMax = envDb[m];
+    }
+    // Normalize so peak of envelope sits near peak of original spectrum
+    // (Power spectrum is normalized to peak=0dB, so do the same for envelope)
+    const envOffset = envMax;
+    // Draw envelope as smooth curve at filter center frequencies
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    let started = false;
+    for (let m = 0; m < state.numMelFilters; m++) {
+      const f = r.filters[m].freqMid;
+      if (f < 60 || f > fMax) continue;
+      const x = xScale(f);
+      const y = yScale(envDb[m] - envOffset);
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    // Mark filter center points
+    ctx.fillStyle = '#dc2626';
+    for (let m = 0; m < state.numMelFilters; m++) {
+      const f = r.filters[m].freqMid;
+      if (f < 60 || f > fMax) continue;
+      const x = xScale(f);
+      const y = yScale(envDb[m] - envOffset);
+      ctx.beginPath(); ctx.arc(x, y, 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+    // Legend
+    ctx.font = '11px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillStyle = '#3b82f6'; ctx.fillText('■ 元のパワースペクトル', padL + 4, padT - 12);
+    ctx.fillStyle = '#dc2626'; ctx.fillText(`— MFCC ${recCoefsN}個から計算した包絡`, padL + 180, padT - 12);
+    // X-axis title
+    ctx.fillStyle = '#888'; ctx.font = '10px sans-serif';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillText('Hz (対数)', padL + plotW, padT + plotH + 20);
+  }
+  document.getElementById('stat11').textContent =
+    `MFCC ${recCoefsN}個で計算した包絡曲線。少ない＝大まかな起伏のみ／多い＝細部まで追う。元スペクトルのフォルマント山に沿っていれば正しく特徴抽出できている証拠。`;
+}
+
+document.getElementById('filterIdx').addEventListener('input', e => {
+  document.getElementById('filterIdxVal').textContent = '#' + e.target.value;
+  renderAll();
+});
+document.getElementById('recCoefs').addEventListener('input', e => {
+  document.getElementById('recCoefsVal').textContent = e.target.value + '個';
+  renderAll();
+});
+
+window.addEventListener('resize', renderAll);
+renderAll();
+</script>
+</body>
+</html>

@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>メル帯域合算ラボ</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Helvetica Neue", sans-serif;
+    background: #fafafa;
+    color: #222;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  header {
+    padding: 14px 24px;
+    background: #fff;
+    border-bottom: 1px solid #e5e5e5;
+  }
+  header h1 { font-size: 19px; margin: 0; font-weight: 600; }
+  header p { margin: 4px 0 0; font-size: 13px; color: #888; }
+  .controls {
+    background: #fff;
+    border-bottom: 1px solid #e5e5e5;
+    padding: 12px 24px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .rec-btn {
+    padding: 10px 18px;
+    background: #222; color: #fff;
+    border: none; border-radius: 4px;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+  .rec-btn.recording { background: #dc2626; }
+  .samples { display: flex; gap: 4px; }
+  .samples button {
+    padding: 7px 12px; background: #f0f0f0;
+    border: 1px solid #ddd; border-radius: 4px;
+    cursor: pointer; font-size: 13px; font-family: inherit;
+  }
+  .samples button:hover { background: #e0e0e0; }
+  .sep { width: 1px; height: 22px; background: #ddd; }
+  .info { color: #666; font-size: 12px; font-family: ui-monospace, monospace; }
+
+  main {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 16px;
+    padding: 16px 20px 28px;
+  }
+  .left { display: flex; flex-direction: column; gap: 12px; }
+  .right { display: flex; flex-direction: column; gap: 12px; }
+
+  .panel {
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    padding: 12px 16px 14px;
+  }
+  .panel h2 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #444;
+  }
+  .panel .hint { font-size: 11px; color: #888; margin-top: 4px; line-height: 1.55; }
+  canvas.vis { display: block; width: 100%; background: #fff; border: 1px solid #f0f0f0; border-radius: 4px; }
+
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .actions button {
+    padding: 5px 10px;
+    background: #f0f0f0; border: 1px solid #ddd;
+    border-radius: 4px; cursor: pointer;
+    font-size: 11px; font-family: inherit;
+  }
+  .actions button:hover { background: #e0e0e0; }
+
+  .ctrl-row { margin: 8px 0 4px; }
+  .ctrl-row label { display: block; font-size: 12px; color: #555; margin-bottom: 3px; }
+  .ctrl-row .val { float: right; color: #2563eb; font-weight: 600; font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 100%; }
+</style>
+</head>
+<body>
+<div style="position:fixed;top:8px;left:12px;z-index:200;"><a href="index.html" style="font-size:11px;color:#666;text-decoration:none;background:rgba(255,255,255,0.95);padding:4px 10px;border:1px solid #e5e5e5;border-radius:4px;font-family:-apple-system,sans-serif;">← トップ</a></div>
+
+<header>
+  <h1>メル帯域合算ラボ</h1>
+  <p>声をメル帯域に分解 → 好きな帯域を選んで合算 → 印鑑形にマッピング。クリックで帯域をON/OFF。</p>
+</header>
+
+<div class="controls">
+  <button class="rec-btn" id="recBtn">押している間 録音</button>
+  <div class="samples">
+    <button data-vowel="a">あ</button>
+    <button data-vowel="i">い</button>
+    <button data-vowel="u">う</button>
+    <button data-vowel="e">え</button>
+    <button data-vowel="o">お</button>
+  </div>
+  <div class="sep"></div>
+  <span class="info" id="infoText">録音 or 合成音を選択</span>
+</div>
+
+<main>
+<div class="left">
+
+  <div class="panel">
+    <h2>① メルスペクトログラム（クリックで帯域 ON/OFF、オレンジ線をドラッグで使用範囲）</h2>
+    <div class="actions">
+      <button id="allOn">全部ON</button>
+      <button id="allOff">全部OFF</button>
+      <button id="lowOnly">低域のみ（0-9）</button>
+      <button id="midOnly">中域のみ（10-24）</button>
+      <button id="highOnly">高域のみ（25-39）</button>
+      <button id="invert">反転</button>
+      <button id="autoTrim">使用範囲を自動検出</button>
+      <button id="trimReset">使用範囲をリセット</button>
+    </div>
+    <canvas id="melSpec" class="vis" style="height: 280px;"></canvas>
+    <div class="hint">
+      <b>行をクリック</b>＝帯域 ON/OFF（暗い行=OFF、合算に使われない）<br>
+      <b>オレンジ線をドラッグ</b>＝使用する時間範囲を調整。範囲外は暗くなり、合算・円マッピングから除外される
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>② 選択された帯域の時間変化（個別 + 合算）</h2>
+    <canvas id="bandLines" class="vis" style="height: 200px;"></canvas>
+    <div class="hint">細い色付き線=各帯域の時間変化、<b>太い黒線=全部の合算</b></div>
+  </div>
+
+</div>
+
+<div class="right">
+
+  <div class="panel">
+    <h2>③ 合算曲線 → 印鑑形</h2>
+    <canvas id="circleVis" class="vis" style="width:100%; aspect-ratio: 1;"></canvas>
+    <div class="hint">合算曲線を円周に巻きつけて、振幅を半径方向の変化として表現</div>
+  </div>
+
+  <div class="panel">
+    <h2>パラメータ</h2>
+    <div class="ctrl-row">
+      <label>FFTサイズ <span class="val" id="fftSizeVal">512</span></label>
+      <input type="range" id="fftSize" min="256" max="2048" step="1" value="512">
+      <div class="hint">2のべき乗のみ有効（256/512/1024/2048）</div>
+    </div>
+    <div class="ctrl-row">
+      <label>メル帯域数 <span class="val" id="numMelVal">40</span></label>
+      <input type="range" id="numMel" min="10" max="60" value="40">
+    </div>
+    <div class="ctrl-row">
+      <label>スムージング <span class="val" id="smoothVal">5</span></label>
+      <input type="range" id="smooth" min="1" max="31" step="2" value="5">
+      <div class="hint">時間方向に移動平均でならす</div>
+    </div>
+    <div class="ctrl-row">
+      <label>変位の倍率 <span class="val" id="ampVal">1.0</span></label>
+      <input type="range" id="amp" min="0.3" max="3" step="0.1" value="1">
+    </div>
+    <div class="ctrl-row">
+      <label>合算モード</label>
+      <select id="diffMode" style="width:100%;padding:6px;font-size:13px;font-family:inherit;">
+        <option value="energy">① エネルギー（瞬間値）</option>
+        <option value="delta">② 総量変化（合計してから差分・符号付）</option>
+        <option value="flux">③ 中身変化（バンドごとに差分→絶対値→合計）</option>
+      </select>
+      <div class="hint">
+        <b>①</b>：その瞬間の音の強さ<br>
+        <b>②</b>：総音量が増えたか減ったか。中身が動いて総量同じだと <b>0</b>（打消し合いあり）<br>
+        <b>③</b>：周波数の中身が変化したか。バンドごとに差分→絶対値→合計するので<b>打ち消し合わない</b>。フォルマント遷移・子音→母音の切替が出る
+      </div>
+    </div>
+  </div>
+
+</div>
+</main>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+const state = {
+  buffer: null,
+  sampleRate: 44100,
+  fftSize: 512,
+  numMel: 40,
+  smooth: 5,
+  amp: 1.0,
+  enabled: null,   // Uint8Array of length numMel
+  melSpec: null,   // 2D array [frame][bin]
+  sumCurve: null,  // 1D array of summed values over time (only within trim range)
+  trimStart: 0,    // fraction 0..1 of total frames
+  trimEnd: 1,      // fraction 0..1
+  diffMode: 'energy', // 'energy' | 'delta' | 'absDelta'
+};
+let audioCtx, activeRecorder, activeChunks = [], persistentStream;
+
+// ============================================================
+// FFT
+// ============================================================
+function fft(re, im) {
+  const N = re.length;
+  for (let i = 1, j = 0; i < N; i++) {
+    let bit = N >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+  }
+  for (let len = 2; len <= N; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < N; i += len) {
+      let cRe = 1, cIm = 0;
+      for (let j = 0; j < (len >> 1); j++) {
+        const h = i + j + (len >> 1);
+        const vRe = re[h] * cRe - im[h] * cIm, vIm = re[h] * cIm + im[h] * cRe;
+        re[h] = re[i+j] - vRe; im[h] = im[i+j] - vIm;
+        re[i+j] += vRe; im[i+j] += vIm;
+        const nr = cRe * wRe - cIm * wIm; cIm = cRe * wIm + cIm * wRe; cRe = nr;
+      }
+    }
+  }
+}
+
+// Snap to nearest power of 2
+function pow2Snap(v) {
+  const exps = [256, 512, 1024, 2048];
+  let best = exps[0], bestD = Infinity;
+  for (const e of exps) { const d = Math.abs(v - e); if (d < bestD) { bestD = d; best = e; } }
+  return best;
+}
+
+// ============================================================
+// Mel filterbank
+// ============================================================
+function hzToMel(hz) { return 2595 * Math.log10(1 + hz / 700); }
+function melToHz(mel) { return 700 * (Math.pow(10, mel / 2595) - 1); }
+
+function makeMelFilterbank(numFilters, fftSize, sampleRate) {
+  const fMax = sampleRate / 2;
+  const melMin = hzToMel(0), melMax = hzToMel(fMax);
+  const pts = [];
+  for (let i = 0; i < numFilters + 2; i++) pts.push(melMin + (melMax - melMin) * i / (numFilters + 1));
+  const bins = pts.map(m => Math.floor((fftSize + 1) * melToHz(m) / sampleRate));
+  const fbank = [];
+  for (let i = 1; i <= numFilters; i++) {
+    const f = new Float32Array(fftSize / 2);
+    const lo = bins[i - 1], mid = bins[i], hi = bins[i + 1];
+    for (let k = lo; k < mid; k++) if (mid > lo) f[k] = (k - lo) / (mid - lo);
+    for (let k = mid; k < hi; k++) if (hi > mid) f[k] = (hi - k) / (hi - mid);
+    fbank.push({ data: f, freqMid: melToHz(pts[i]) });
+  }
+  return fbank;
+}
+
+// ============================================================
+// Mel spectrogram computation
+// ============================================================
+function computeMelSpectrogram(samples, sr, fftSize, numMel) {
+  const hop = Math.floor(fftSize / 4);
+  const numFrames = Math.max(1, Math.floor((samples.length - fftSize) / hop) + 1);
+  const fbank = makeMelFilterbank(numMel, fftSize, sr);
+  const spec = [];
+  const re = new Float32Array(fftSize), im = new Float32Array(fftSize);
+  let globalPeak = 0;
+  for (let f = 0; f < numFrames; f++) {
+    const start = f * hop;
+    // Windowed + DC removed
+    let mean = 0, cnt = 0;
+    for (let i = 0; i < fftSize; i++) { const si = start + i; if (si < samples.length) { mean += samples[si]; cnt++; } }
+    if (cnt > 0) mean /= cnt;
+    for (let i = 0; i < fftSize; i++) {
+      const si = start + i;
+      const w = 0.5 * (1 - Math.cos(2 * Math.PI * i / (fftSize - 1)));
+      re[i] = si < samples.length ? (samples[si] - mean) * w : 0;
+      im[i] = 0;
+    }
+    fft(re, im);
+    const frame = new Float32Array(numMel);
+    for (let m = 0; m < numMel; m++) {
+      let s = 0;
+      for (let k = 0; k < fftSize / 2; k++) {
+        const power = re[k] * re[k] + im[k] * im[k];
+        s += power * fbank[m].data[k];
+      }
+      frame[m] = Math.sqrt(s);
+      if (frame[m] > globalPeak) globalPeak = frame[m];
+    }
+    spec.push(frame);
+  }
+  // Normalize globally
+  if (globalPeak > 0) {
+    for (const fr of spec) for (let m = 0; m < fr.length; m++) fr[m] /= globalPeak;
+  }
+  return { frames: spec, numFrames, numMel, fbank, hop };
+}
+
+// ============================================================
+// Sum calculation
+// ============================================================
+function computeSumCurve() {
+  if (!state.melSpec) return null;
+  const Tfull = state.melSpec.numFrames;
+  const fStart = Math.max(0, Math.floor(state.trimStart * Tfull));
+  const fEnd = Math.min(Tfull, Math.ceil(state.trimEnd * Tfull));
+  const T = Math.max(1, fEnd - fStart);
+  let out;
+
+  if (state.diffMode === 'flux') {
+    // Per-band symmetric diff → abs → sum across enabled bands
+    out = new Float32Array(T);
+    for (let t = 0; t < T; t++) {
+      const tPrevIdx = fStart + (t > 0 ? t - 1 : t);
+      const tNextIdx = fStart + (t < T - 1 ? t + 1 : t);
+      let s = 0;
+      for (let m = 0; m < state.numMel; m++) {
+        if (!state.enabled[m]) continue;
+        const d = (state.melSpec.frames[tNextIdx][m] - state.melSpec.frames[tPrevIdx][m]) / 2;
+        s += Math.abs(d);
+      }
+      out[t] = s;
+    }
+  } else {
+    // First: sum enabled bands per frame
+    const sum = new Float32Array(T);
+    for (let t = 0; t < T; t++) {
+      let s = 0;
+      for (let m = 0; m < state.numMel; m++) {
+        if (state.enabled[m]) s += state.melSpec.frames[fStart + t][m];
+      }
+      sum[t] = s;
+    }
+    if (state.diffMode === 'delta') {
+      out = new Float32Array(T);
+      for (let t = 0; t < T; t++) {
+        const prev = t > 0 ? sum[t - 1] : sum[t];
+        const next = t < T - 1 ? sum[t + 1] : sum[t];
+        out[t] = (next - prev) / 2;
+      }
+    } else {
+      out = sum;
+    }
+  }
+
+  // Temporal smoothing
+  const w = Math.max(1, state.smooth | 0);
+  const half = Math.floor(w / 2);
+  const sm = new Float32Array(T);
+  for (let t = 0; t < T; t++) {
+    let s = 0, c = 0;
+    for (let j = -half; j <= half; j++) {
+      const k = t + j;
+      if (k >= 0 && k < T) { s += out[k]; c++; }
+    }
+    sm[t] = s / c;
+  }
+  // Normalize: signed delta → divide by max abs; others → divide by max
+  if (state.diffMode === 'delta') {
+    let peak = 0;
+    for (const v of sm) if (Math.abs(v) > peak) peak = Math.abs(v);
+    if (peak > 0) for (let t = 0; t < T; t++) sm[t] /= peak;
+  } else {
+    let peak = 0;
+    for (const v of sm) if (v > peak) peak = v;
+    if (peak > 0) for (let t = 0; t < T; t++) sm[t] /= peak;
+  }
+  return sm;
+}
+
+// ============================================================
+// Audio I/O
+// ============================================================
+async function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
+}
+async function ensureStream() {
+  if (persistentStream && persistentStream.active) return persistentStream;
+  try {
+    persistentStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+    return persistentStream;
+  } catch (err) { alert('マイクが取得できません: ' + err.message); return null; }
+}
+async function startRec() {
+  if (activeRecorder) return;
+  await ensureAudio();
+  const stream = await ensureStream(); if (!stream) return;
+  activeChunks = [];
+  activeRecorder = new MediaRecorder(stream);
+  activeRecorder.ondataavailable = e => activeChunks.push(e.data);
+  activeRecorder.onstop = async () => {
+    try {
+      if (!activeChunks.length) return;
+      const blob = new Blob(activeChunks, { type: activeChunks[0].type || 'audio/webm' });
+      const ab = await blob.arrayBuffer();
+      if (!ab.byteLength) return;
+      const audioBuf = await audioCtx.decodeAudioData(ab);
+      setBuffer(audioBuf);
+    } catch (err) { console.error(err); } finally { activeRecorder = null; }
+  };
+  activeRecorder.start(50);
+  document.getElementById('recBtn').classList.add('recording');
+  document.getElementById('recBtn').textContent = '録音中…';
+}
+function stopRec() {
+  if (!activeRecorder) return;
+  try { activeRecorder.requestData(); } catch {}
+  try { activeRecorder.stop(); } catch {}
+  document.getElementById('recBtn').classList.remove('recording');
+  document.getElementById('recBtn').textContent = '押している間 録音';
+}
+const recBtn = document.getElementById('recBtn');
+recBtn.addEventListener('mousedown', e => { e.preventDefault(); startRec(); });
+recBtn.addEventListener('mouseup', e => { e.preventDefault(); stopRec(); });
+recBtn.addEventListener('mouseleave', () => { if (activeRecorder) stopRec(); });
+
+document.querySelectorAll('.samples button').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    await ensureAudio();
+    const sr = audioCtx.sampleRate;
+    const dur = 1.0;
+    const buf = audioCtx.createBuffer(1, Math.floor(sr * dur), sr);
+    const data = buf.getChannelData(0);
+    const f0 = 150;
+    const formants = {
+      a: [760, 1280, 2500], i: [300, 2200, 3000],
+      u: [350, 1250, 2300], e: [480, 1900, 2500], o: [480, 900, 2400],
+    }[btn.dataset.vowel];
+    for (let i = 0; i < data.length; i++) {
+      const t = i / sr;
+      let v = 0;
+      for (let h = 1; h <= 30; h++) {
+        const f = f0 * h;
+        if (f > sr / 2) break;
+        let amp = 0;
+        for (const fmt of formants) { const d = (f - fmt) / 80; amp += Math.exp(-d * d); }
+        v += amp * Math.sin(2 * Math.PI * f * t) / (h * 0.7 + 1);
+      }
+      const env = Math.min(1, t * 10) * Math.min(1, (dur - t) * 10);
+      data[i] = v * env * 0.15;
+    }
+    setBuffer(buf);
+  });
+});
+
+function setBuffer(buf) {
+  state.buffer = buf;
+  state.sampleRate = buf.sampleRate;
+  state.trimStart = 0; state.trimEnd = 1;
+  document.getElementById('infoText').textContent =
+    `録音: ${(buf.duration * 1000).toFixed(0)}ms / ${buf.sampleRate}Hz`;
+  recompute();
+  autoTrim();
+}
+
+// ============================================================
+// Main compute + render
+// ============================================================
+function recompute() {
+  if (!state.buffer) { renderAll(); return; }
+  const samples = state.buffer.getChannelData(0);
+  state.melSpec = computeMelSpectrogram(samples, state.sampleRate, state.fftSize, state.numMel);
+  // Initialize / reset enabled array if size changed
+  if (!state.enabled || state.enabled.length !== state.numMel) {
+    state.enabled = new Uint8Array(state.numMel);
+    for (let m = 0; m < state.numMel; m++) state.enabled[m] = 1;
+  }
+  state.sumCurve = computeSumCurve();
+  renderAll();
+}
+function recomputeSum() {
+  if (!state.melSpec) { renderAll(); return; }
+  state.sumCurve = computeSumCurve();
+  renderAll();
+}
+
+function renderAll() {
+  renderMelSpec();
+  renderBandLines();
+  renderCircle();
+}
+
+// ============================================================
+// Rendering helpers
+// ============================================================
+function setupCanvas(id) {
+  const c = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  const rect = c.getBoundingClientRect();
+  c.width = rect.width * dpr;
+  c.height = rect.height * dpr;
+  const ctx = c.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, rect.width, rect.height);
+  return { ctx, W: rect.width, H: rect.height, canvas: c };
+}
+
+function colorMap(t) {
+  t = Math.max(0, Math.min(1, t));
+  const stops = [
+    [1.00, 1.00, 1.00],
+    [0.85, 0.93, 1.00],
+    [0.40, 0.66, 0.95],
+    [0.23, 0.40, 0.85],
+    [0.45, 0.20, 0.65],
+    [0.78, 0.13, 0.20],
+  ];
+  const seg = t * (stops.length - 1);
+  const i = Math.min(stops.length - 2, Math.floor(seg));
+  const f = seg - i;
+  const a = stops[i], b = stops[i + 1];
+  return [
+    Math.round(255 * (a[0] * (1 - f) + b[0] * f)),
+    Math.round(255 * (a[1] * (1 - f) + b[1] * f)),
+    Math.round(255 * (a[2] * (1 - f) + b[2] * f)),
+  ];
+}
+
+function renderMelSpec() {
+  const { ctx, W, H, canvas } = setupCanvas('melSpec');
+  const padL = 56, padB = 22;
+  const plotW = W - padL, plotH = H - padB;
+  if (!state.melSpec) {
+    ctx.fillStyle = '#bbb'; ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center'; ctx.fillText('録音/合成音を選択', W/2, H/2);
+    return;
+  }
+  const { frames, numFrames, numMel } = state.melSpec;
+  const rowH = plotH / numMel;
+  // Off-screen image for the bitmap
+  const off = document.createElement('canvas');
+  off.width = Math.max(1, Math.floor(plotW));
+  off.height = Math.max(1, Math.floor(plotH));
+  const offCtx = off.getContext('2d');
+  const img = offCtx.createImageData(off.width, off.height);
+  for (let x = 0; x < off.width; x++) {
+    const fIdx = Math.min(numFrames - 1, Math.floor((x / off.width) * numFrames));
+    for (let y = 0; y < off.height; y++) {
+      // y inverted: bottom = low band, top = high band
+      const m = numMel - 1 - Math.floor((y / off.height) * numMel);
+      const v = frames[fIdx][m];
+      let r, g, b;
+      if (state.enabled[m]) {
+        [r, g, b] = colorMap(v);
+      } else {
+        // dim grayscale for disabled
+        const gray = Math.round(220 - v * 60);
+        r = g = b = gray;
+      }
+      const idx = (y * off.width + x) * 4;
+      img.data[idx] = r; img.data[idx+1] = g; img.data[idx+2] = b; img.data[idx+3] = 255;
+    }
+  }
+  offCtx.putImageData(img, 0, 0);
+  ctx.drawImage(off, padL, 0, plotW, plotH);
+
+  // Trim overlay: dim outside the [trimStart, trimEnd] range
+  const trimXStart = padL + state.trimStart * plotW;
+  const trimXEnd = padL + state.trimEnd * plotW;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+  if (trimXStart > padL) ctx.fillRect(padL, 0, trimXStart - padL, plotH);
+  if (trimXEnd < padL + plotW) ctx.fillRect(trimXEnd, 0, padL + plotW - trimXEnd, plotH);
+  // Trim lines
+  ctx.strokeStyle = '#f59e0b';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 4]);
+  ctx.beginPath(); ctx.moveTo(trimXStart, 0); ctx.lineTo(trimXStart, plotH); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(trimXEnd, 0); ctx.lineTo(trimXEnd, plotH); ctx.stroke();
+  ctx.setLineDash([]);
+  // Trim handle labels
+  ctx.fillStyle = '#f59e0b'; ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  if (trimXStart > padL + 4 && trimXStart < padL + plotW - 60) ctx.fillText('使用範囲 →', trimXStart + 4, 4);
+  ctx.textAlign = 'right';
+  if (trimXEnd > padL + 60 && trimXEnd < padL + plotW - 4) ctx.fillText('← 使用範囲', trimXEnd - 4, 4);
+
+  // Y axis labels (frequency in Hz, with mel-band index in parentheses)
+  ctx.fillStyle = '#666'; ctx.font = '10px sans-serif';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (const m of [0, Math.floor(numMel/4), Math.floor(numMel/2), Math.floor(3*numMel/4), numMel-1]) {
+    const f = state.melSpec.fbank[m].freqMid;
+    const y = plotH - (m + 0.5) * rowH;
+    const fLabel = f >= 1000 ? (f/1000).toFixed(1) + 'k' : f.toFixed(0);
+    ctx.fillText(`${fLabel}Hz`, padL - 4, y);
+  }
+  // Mel index labels (smaller, on left side, separately styled)
+  ctx.fillStyle = '#bbb'; ctx.font = '9px ui-monospace, monospace';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  for (const m of [0, Math.floor(numMel/4), Math.floor(numMel/2), Math.floor(3*numMel/4), numMel-1]) {
+    const y = plotH - (m + 0.5) * rowH;
+    ctx.fillText(`#${m}`, 2, y);
+  }
+  // X axis
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const dur = state.buffer.duration * 1000;
+  for (let i = 0; i <= 4; i++) {
+    const t = i / 4 * dur;
+    const x = padL + i / 4 * plotW;
+    let align = 'center'; if (i === 0) align = 'left'; if (i === 4) align = 'right';
+    ctx.textAlign = align;
+    ctx.fillText(t.toFixed(0) + 'ms', x, plotH + 4);
+  }
+
+  // Store layout for click handler
+  canvas._layout = { padL, padB, plotW, plotH, numMel, rowH };
+}
+
+function renderBandLines() {
+  const { ctx, W, H } = setupCanvas('bandLines');
+  const padL = 56, padR = 8, padT = 14, padB = 24;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  if (!state.melSpec) return;
+  const { frames, numFrames, numMel } = state.melSpec;
+  const T = numFrames;
+  // Y range: signed for delta mode, 0..1 for others
+  const signed = state.diffMode === 'delta';
+  const yLabels = signed ? [-1, -0.5, 0, 0.5, 1] : [0, 0.25, 0.5, 0.75, 1.0];
+  const yMin = signed ? -1 : 0;
+  const yMax = 1;
+  const yScale = v => padT + plotH - (v - yMin) / (yMax - yMin) * plotH * 0.95 - plotH * 0.025;
+  // Y axis grid + labels
+  ctx.strokeStyle = '#f0f0f0'; ctx.lineWidth = 1;
+  ctx.fillStyle = '#666'; ctx.font = '10px sans-serif';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (const v of yLabels) {
+    const y = yScale(v);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+    ctx.fillText(v.toFixed(2), padL - 4, y);
+  }
+  // Zero line (emphasized in delta mode)
+  if (signed) {
+    ctx.strokeStyle = '#aaa'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padL, yScale(0)); ctx.lineTo(padL + plotW, yScale(0)); ctx.stroke();
+  }
+  // Y axis title
+  ctx.save();
+  ctx.translate(14, padT + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillStyle = '#888'; ctx.font = '10px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const yTitle = state.diffMode === 'delta' ? '総量変化（符号付）'
+              : state.diffMode === 'flux' ? '中身変化量'
+              : '正規化エネルギー';
+  ctx.fillText(yTitle, 0, 0);
+  ctx.restore();
+
+  // each enabled band as thin line (energy mode only — delta mode hides them for clarity)
+  if (state.diffMode === 'energy') {
+    for (let m = 0; m < numMel; m++) {
+      if (!state.enabled[m]) continue;
+      const tc = m / Math.max(1, numMel - 1);
+      ctx.strokeStyle = `hsla(${tc * 280}, 70%, 50%, 0.45)`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i < T; i++) {
+        const x = padL + (i / Math.max(1, T - 1)) * plotW;
+        const v = frames[i][m];
+        const y = yScale(v);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+  }
+  // Trim overlay (dim outside selected time range)
+  const trimXStart = padL + state.trimStart * plotW;
+  const trimXEnd = padL + state.trimEnd * plotW;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+  if (trimXStart > padL) ctx.fillRect(padL, padT, trimXStart - padL, plotH);
+  if (trimXEnd < padL + plotW) ctx.fillRect(trimXEnd, padT, padL + plotW - trimXEnd, plotH);
+  ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.moveTo(trimXStart, padT); ctx.lineTo(trimXStart, padT + plotH); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(trimXEnd, padT); ctx.lineTo(trimXEnd, padT + plotH); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // sum curve (bold black, mapped only within trim region)
+  if (state.sumCurve) {
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < state.sumCurve.length; i++) {
+      const tRatio = state.trimStart + (i / Math.max(1, state.sumCurve.length - 1)) * (state.trimEnd - state.trimStart);
+      const x = padL + tRatio * plotW;
+      const y = yScale(state.sumCurve[i]);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  // X axis labels (time in ms)
+  ctx.fillStyle = '#666'; ctx.font = '10px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const dur = state.buffer ? state.buffer.duration * 1000 : 1000;
+  for (let i = 0; i <= 4; i++) {
+    const t = i / 4 * dur;
+    const x = padL + i / 4 * plotW;
+    let align = 'center'; if (i === 0) align = 'left'; if (i === 4) align = 'right';
+    ctx.textAlign = align;
+    ctx.fillText(t.toFixed(0) + 'ms', x, padT + plotH + 4);
+  }
+  // legend
+  ctx.font = '11px sans-serif'; ctx.fillStyle = '#111';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  const enabledCount = state.enabled ? Array.from(state.enabled).filter(x => x).length : 0;
+  ctx.fillText(`合算（${enabledCount}/${numMel}帯域、使用範囲のみ）`, padL, 0);
+}
+
+function renderCircle() {
+  const { ctx, W, H } = setupCanvas('circleVis');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+  const cx = W / 2, cy = H / 2;
+  const baseR = Math.min(W, H) * 0.30;
+  const variation = Math.min(W, H) * 0.18 * state.amp;
+  // base circle
+  ctx.strokeStyle = '#e5e5e5'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, baseR, 0, Math.PI * 2); ctx.stroke();
+  if (!state.sumCurve) {
+    ctx.fillStyle = '#bbb'; ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center'; ctx.fillText('待機中', cx, cy);
+    return;
+  }
+  const N = state.sumCurve.length;
+  ctx.strokeStyle = '#2563eb';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  for (let i = 0; i <= N; i++) {
+    const idx = i % N;
+    const a = -Math.PI / 2 + (idx / N) * Math.PI * 2;
+    // delta mode: signed values (negative = inward, positive = outward) from baseR
+    // others: always outward
+    const r = baseR + state.sumCurve[idx] * variation;
+    const x = cx + Math.cos(a) * r;
+    const y = cy + Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+}
+
+// ============================================================
+// Mouse handlers for mel-spec: drag trim handles, click to toggle bands
+// ============================================================
+const TRIM_HIT = 8;
+let dragState = null;
+
+const melCanvas = document.getElementById('melSpec');
+
+function getCanvasXY(e, canvas) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top, rect };
+}
+
+melCanvas.addEventListener('mousedown', e => {
+  const canvas = e.currentTarget;
+  if (!canvas._layout || !state.melSpec) return;
+  const { padL, plotW, plotH } = canvas._layout;
+  const { x, y } = getCanvasXY(e, canvas);
+  if (y < 0 || y > plotH) return;
+  const trimXStart = padL + state.trimStart * plotW;
+  const trimXEnd = padL + state.trimEnd * plotW;
+  if (Math.abs(x - trimXStart) <= TRIM_HIT) {
+    dragState = { type: 'trim-start', startX: x, startVal: state.trimStart, plotW, padL };
+    canvas.style.cursor = 'ew-resize';
+  } else if (Math.abs(x - trimXEnd) <= TRIM_HIT) {
+    dragState = { type: 'trim-end', startX: x, startVal: state.trimEnd, plotW, padL };
+    canvas.style.cursor = 'ew-resize';
+  } else {
+    // pending click — only fire on mouseup without movement
+    dragState = { type: 'pending-click', startX: x, startY: y, plotW, padL, plotH };
+  }
+});
+
+window.addEventListener('mousemove', e => {
+  if (!dragState) {
+    // Show ew-resize cursor near trim handles
+    if (melCanvas._layout && state.melSpec) {
+      const { x, y } = getCanvasXY(e, melCanvas);
+      const { padL, plotW, plotH } = melCanvas._layout;
+      if (y >= 0 && y <= plotH && x >= 0) {
+        const trimXStart = padL + state.trimStart * plotW;
+        const trimXEnd = padL + state.trimEnd * plotW;
+        const near = Math.abs(x - trimXStart) <= TRIM_HIT || Math.abs(x - trimXEnd) <= TRIM_HIT;
+        melCanvas.style.cursor = near ? 'ew-resize' : '';
+      } else {
+        melCanvas.style.cursor = '';
+      }
+    }
+    return;
+  }
+  const { x } = getCanvasXY(e, melCanvas);
+  if (dragState.type === 'trim-start' || dragState.type === 'trim-end') {
+    const frac = Math.max(0, Math.min(1, (x - dragState.padL) / dragState.plotW));
+    if (dragState.type === 'trim-start') {
+      state.trimStart = Math.min(state.trimEnd - 0.02, frac);
+    } else {
+      state.trimEnd = Math.max(state.trimStart + 0.02, frac);
+    }
+    recomputeSum();
+  } else if (dragState.type === 'pending-click') {
+    // If moved enough, drop the pending click (no toggle)
+    if (Math.abs(x - dragState.startX) > 4) dragState.type = 'cancelled';
+  }
+});
+
+window.addEventListener('mouseup', e => {
+  if (!dragState) return;
+  if (dragState.type === 'pending-click') {
+    const { x, y, plotW, padL, plotH } = dragState;
+    if (state.melSpec && x >= padL && x <= padL + plotW && y >= 0 && y <= plotH) {
+      const m = state.numMel - 1 - Math.floor((y / plotH) * state.numMel);
+      if (m >= 0 && m < state.numMel) {
+        state.enabled[m] = state.enabled[m] ? 0 : 1;
+        recomputeSum();
+      }
+    }
+  }
+  dragState = null;
+  melCanvas.style.cursor = '';
+});
+
+// ============================================================
+// Auto-trim using RMS-based silence detection
+// ============================================================
+function autoTrim() {
+  if (!state.melSpec) return;
+  const T = state.melSpec.numFrames;
+  // Per-frame total mel energy
+  const energy = new Float32Array(T);
+  let peak = 0;
+  for (let t = 0; t < T; t++) {
+    let s = 0;
+    for (let m = 0; m < state.numMel; m++) s += state.melSpec.frames[t][m];
+    energy[t] = s;
+    if (s > peak) peak = s;
+  }
+  if (peak === 0) return;
+  const threshold = peak * 0.15;
+  let first = 0;
+  while (first < T && energy[first] < threshold) first++;
+  let last = T - 1;
+  while (last > first && energy[last] < threshold) last--;
+  if (last <= first) { state.trimStart = 0; state.trimEnd = 1; }
+  else {
+    state.trimStart = first / T;
+    state.trimEnd = (last + 1) / T;
+  }
+  recomputeSum();
+}
+document.getElementById('autoTrim').addEventListener('click', autoTrim);
+document.getElementById('trimReset').addEventListener('click', () => {
+  state.trimStart = 0; state.trimEnd = 1; recomputeSum();
+});
+
+// ============================================================
+// Bulk action buttons
+// ============================================================
+document.getElementById('allOn').addEventListener('click', () => { if (!state.enabled) return; state.enabled.fill(1); recomputeSum(); });
+document.getElementById('allOff').addEventListener('click', () => { if (!state.enabled) return; state.enabled.fill(0); recomputeSum(); });
+document.getElementById('lowOnly').addEventListener('click', () => {
+  if (!state.enabled) return;
+  state.enabled.fill(0);
+  const lo = 0, hi = Math.floor(state.numMel * 0.25);
+  for (let m = lo; m <= hi; m++) state.enabled[m] = 1;
+  recomputeSum();
+});
+document.getElementById('midOnly').addEventListener('click', () => {
+  if (!state.enabled) return;
+  state.enabled.fill(0);
+  const lo = Math.floor(state.numMel * 0.25), hi = Math.floor(state.numMel * 0.6);
+  for (let m = lo; m <= hi; m++) state.enabled[m] = 1;
+  recomputeSum();
+});
+document.getElementById('highOnly').addEventListener('click', () => {
+  if (!state.enabled) return;
+  state.enabled.fill(0);
+  const lo = Math.floor(state.numMel * 0.6);
+  for (let m = lo; m < state.numMel; m++) state.enabled[m] = 1;
+  recomputeSum();
+});
+document.getElementById('invert').addEventListener('click', () => {
+  if (!state.enabled) return;
+  for (let m = 0; m < state.enabled.length; m++) state.enabled[m] = state.enabled[m] ? 0 : 1;
+  recomputeSum();
+});
+
+// ============================================================
+// Parameter sliders
+// ============================================================
+document.getElementById('fftSize').addEventListener('input', e => {
+  const v = pow2Snap(parseInt(e.target.value, 10));
+  state.fftSize = v;
+  document.getElementById('fftSizeVal').textContent = v;
+  recompute();
+});
+document.getElementById('numMel').addEventListener('input', e => {
+  state.numMel = parseInt(e.target.value, 10);
+  document.getElementById('numMelVal').textContent = state.numMel;
+  recompute();
+});
+document.getElementById('smooth').addEventListener('input', e => {
+  state.smooth = parseInt(e.target.value, 10);
+  document.getElementById('smoothVal').textContent = state.smooth;
+  recomputeSum();
+});
+document.getElementById('amp').addEventListener('input', e => {
+  state.amp = parseFloat(e.target.value);
+  document.getElementById('ampVal').textContent = state.amp.toFixed(1);
+  renderCircle();
+});
+document.getElementById('diffMode').addEventListener('change', e => {
+  state.diffMode = e.target.value;
+  recomputeSum();
+});
+
+window.addEventListener('resize', renderAll);
+renderAll();
+</script>
+</body>
+</html>
